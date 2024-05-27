@@ -1,37 +1,32 @@
-import {readFile} from 'fs/promises';
-import {exec} from 'child_process';
+#!/usr/bin/env node
 
-const ERROR_MESSAGE = "Error executing command: ";
+import { config, ERROR_MESSAGE } from './config.js';
+import logger from './logger.js';
+import { checkAndInstallPackages } from "./utils.js";
+import { animatedLog } from "./utils.js";
 
-async function prepareTasks() {
+let log;
+const args = process.argv.slice(2);
+const tasks = args;
+
+/**
+ * Main function to set up the project.
+ *
+ * @returns {Promise<void>} - A Promise that resolves when the setup is complete.
+ * @throws {Error} - If there is an error in the setup process.
+ */
+async function main() {
     try {
-        const Tasks = (await import('./tasks.js')).default;
-        const tasksJSON = await readFile('./scripts/tasks.json');
-        const tasks = JSON.parse(tasksJSON);
-        return new Tasks(tasks);
-    } catch (e) {
-        throw e;
+        await checkAndInstallPackages(config.necessaryPackages);
+        await logger.update?.();
+        clearInterval(log);
+        const { runTasks } = await import('./tasks.js');
+        await runTasks(tasks);
+    } catch (error) {
+        logger.error(ERROR_MESSAGE, error);
     }
 }
 
-async function installNecessaryPackages() {
-    console.log("Starting ...");
-    return new Promise((resolve, reject) => {
-        exec("npm install listr execa", {}, (err) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve();
-            }
-        })
-    })
-}
+log = animatedLog("Starting ...");
 
-installNecessaryPackages()
-    .then(async () => {
-        const tasks = await prepareTasks();
-        tasks.run();
-    })
-    .catch(error => {
-        console.error(ERROR_MESSAGE, error);
-    });
+await main();

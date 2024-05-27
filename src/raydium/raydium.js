@@ -34,7 +34,7 @@ class Raydium {
 
     #SOL;
     #userTokenAccounts;
-
+    #newTokenCallback;
     constructor() {
         const sol = new PublicKey(this.#SOL_MINT);
         this.#SOL = new Token(TOKEN_PROGRAM_ID, sol, 6, "SOL", "Solana");
@@ -46,45 +46,49 @@ class Raydium {
      */
     listenNewTokens(callback) {
         if (callback === undefined) return;
-
+        this.#newTokenCallback = callback;
         console.log("Listening to new tokens...");
 
-        listenLogs(RAYDIUM_POOL_V4_PROGRAM_ID, async txLogs => {
-            const { logs, signature } = txLogs;
-
-            if (this.#findLogEntry("error", logs)) return;
-
-            if (
-                this.#findLogEntry("init_pc_amount", logs) ||
-                this.#findLogEntry("initialize2", logs)
-            ) {
-                console.log(`New LP init transaction found: ${signature}`);
-
-                try {
-                    const pool = await this.#getPoolKeysFromTX(txLogs.signature);
-                    console.log(`New pool found: ${pool.baseMint.toBase58()}, ${pool.quoteMint.toBase58()}`);
-                    await DB.putPool(pool.id.toString(), JSON.stringify(pool));
-                    if (pool.baseMint.toBase58() === "So11111111111111111111111111111111111111112") {
-                        callback(pool.quoteMint.toBase58());
-                    } else {
-                        callback(pool.baseMint.toBase58());
-                    }
-                } catch (error) {
-                    console.log(`error : ${error}, signature: ${signature}`);
-                }
-            }
-        });
+        listenLogs(RAYDIUM_POOL_V4_PROGRAM_ID, this.#parseTxLogs);
     }
 
-    async getTestMint(callback) {
-        const signature = "4VdUw8zE4Lr4Ha9W2cMLJhzEYaKKd3E3YAKZnRPYgh35mQePKhq3fM1xRKVifGpLAihEbLwH9CHJHA9wdyomaknh";
-        this.#poolKeys = await this.#getPoolKeysFromTX(signature);
 
-        // this.#poolsInfos.set(poolKeys.id, poolKeys);
+    /**
+     * Parses transaction logs and performs actions based on the logs and signature.
+     *
+     * @param {Object} txLogs - The transaction logs object containing logs and signature.
+     * @returns {void}
+     */
+    #parseTxLogs = async txLogs => {
+        const { logs, signature } = txLogs;
 
-        // console.log(`New pool found: ${poolKeys.baseMint.toBase58()}, ${poolKeys.quoteMint.toBase58()}`);
+        if (this.#findLogEntry("error", logs)) return;
 
-        callback(this.#poolKeys.baseMint.toBase58());
+        if (
+            this.#findLogEntry("init_pc_amount", logs) ||
+            this.#findLogEntry("initialize2", logs)
+        ) {
+            console.log(`New LP init transaction found: ${signature}`);
+
+            try {
+                const pool = await this.#getPoolKeysFromTX(txLogs.signature);
+                const baseMint = pool.baseMint;
+                const quoteMint = pool.quoteMint;
+
+                console.log(`New pool found: ${baseMint.toBase58()}, ${quoteMint.toBase58()}`);
+
+                if (baseMint.toBase58() === "So11111111111111111111111111111111111111112") {
+                    pool.baseMint = quoteMint;
+                    pool.quoteMint = baseMint;
+                }
+
+                await DB.putPool(pool.id.toString(), JSON.stringify(pool));
+
+                this.#newTokenCallback(baseMint.toBase58());
+            } catch (error) {
+                console.log(`error : ${error}, signature: ${signature}`);
+            }
+        }
     }
 
     async #getPoolKeysFromTX(tx) {
@@ -208,41 +212,41 @@ class Raydium {
     }
 
     async #getPoolKeys(baseMint) {
-        let poolkeys = this.#poolKeys[baseMint];
+        let poolKeys = this.#poolKeys[baseMint];
 
-        if (poolkeys === undefined) {
-            const { _id, _rev, ...pool } = (await DB.getPool(baseMint)).docs?.[0];
-            poolkeys = pool;
-            this.#poolKeys[pool.baseMint] = poolkeys;
+        if (!poolKeys) {
+            const { _id, _rev, ...pool } = await DB.getPool(baseMint);
+            poolKeys = pool;
+            this.#poolKeys[pool.baseMint] = poolKeys;
         }
 
-        if (poolkeys) {
+        if (poolKeys) {
             return {
-                id: new PublicKey(poolkeys.id),
-                baseMint: new PublicKey(poolkeys.baseMint),
-                quoteMint: new PublicKey(poolkeys.quoteMint),
-                lpMint: new PublicKey(poolkeys.lpMint),
-                baseDecimals: new BN(poolkeys.baseDecimals), //
-                quoteDecimals: new BN(poolkeys.quoteDecimals), //
-                lpDecimals: poolkeys.lpDecimals, //
+                id: new PublicKey(poolKeys.id),
+                baseMint: new PublicKey(poolKeys.baseMint),
+                quoteMint: new PublicKey(poolKeys.quoteMint),
+                lpMint: new PublicKey(poolKeys.lpMint),
+                baseDecimals: new BN(poolKeys.baseDecimals), //
+                quoteDecimals: new BN(poolKeys.quoteDecimals), //
+                lpDecimals: poolKeys.lpDecimals, //
                 version: 4,
-                programId: new PublicKey(poolkeys.programId),
-                authority: new PublicKey(poolkeys.authority),
-                openOrders: new PublicKey(poolkeys.openOrders),
-                targetOrders: new PublicKey(poolkeys.targetOrders),
-                baseVault: new PublicKey(poolkeys.baseVault),
-                quoteVault: new PublicKey(poolkeys.quoteVault),
-                withdrawQueue: new PublicKey(poolkeys.withdrawQueue),
-                lpVault: new PublicKey(poolkeys.lpVault),
-                marketVersion: poolkeys.marketVersion, //
-                marketProgramId: new PublicKey(poolkeys.marketProgramId),
-                marketId: new PublicKey(poolkeys.marketId),
-                marketAuthority: new PublicKey(poolkeys.marketAuthority),
-                marketBaseVault: new PublicKey(poolkeys.baseVault),
-                marketQuoteVault: new PublicKey(poolkeys.quoteVault),
-                marketBids: new PublicKey(poolkeys.marketBids),
-                marketAsks: new PublicKey(poolkeys.marketAsks),
-                marketEventQueue: new PublicKey(poolkeys.marketEventQueue),
+                programId: new PublicKey(poolKeys.programId),
+                authority: new PublicKey(poolKeys.authority),
+                openOrders: new PublicKey(poolKeys.openOrders),
+                targetOrders: new PublicKey(poolKeys.targetOrders),
+                baseVault: new PublicKey(poolKeys.baseVault),
+                quoteVault: new PublicKey(poolKeys.quoteVault),
+                withdrawQueue: new PublicKey(poolKeys.withdrawQueue),
+                lpVault: new PublicKey(poolKeys.lpVault),
+                marketVersion: poolKeys.marketVersion, //
+                marketProgramId: new PublicKey(poolKeys.marketProgramId),
+                marketId: new PublicKey(poolKeys.marketId),
+                marketAuthority: new PublicKey(poolKeys.marketAuthority),
+                marketBaseVault: new PublicKey(poolKeys.baseVault),
+                marketQuoteVault: new PublicKey(poolKeys.quoteVault),
+                marketBids: new PublicKey(poolKeys.marketBids),
+                marketAsks: new PublicKey(poolKeys.marketAsks),
+                marketEventQueue: new PublicKey(poolKeys.marketEventQueue),
                 lookupTableAccount: PublicKey.default
             };
         }
@@ -255,9 +259,16 @@ class Raydium {
         let poolInfo = this.#poolInfos[poolKeys.id.toBase58()];
 
         if (!poolInfo) {
+            const programId = {
+                4: new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'), // V4 Program Kimliği
+                5: new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8')  // V5 Program Kimliği
+            };
+            // const result = await Liquidity.fetchAllPoolKeys(connection, programId);
             poolInfo = await Liquidity.fetchInfo({
                 connection: connection,
                 poolKeys: poolKeys
+            }).catch(error => {
+                console.log(error);
             });
 
             this.#poolInfos[poolKeys.id.toBase58()] = poolInfo;
@@ -266,14 +277,44 @@ class Raydium {
         if (isBuy) {
             amountIn = new TokenAmount(this.#SOL, rawAmountIn * LAMPORTS_PER_SOL);
             currencyOut = new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolKeys.baseDecimals.toNumber());
-        } else {
-            const token = new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolKeys.baseDecimals.toNumber());
-            amountIn = new TokenAmount(
-                token,
-                rawAmountIn * Math.pow(10, poolKeys.baseDecimals.toNumber())
-            );
-            currencyOut = new Token(TOKEN_PROGRAM_ID, poolKeys.quoteMint, poolKeys.baseDecimals.toNumber())
         }
+
+        else {
+            // const t = await DB.getPool(poolKeys.baseMint.toBase58());
+
+            const token = new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolInfo.lpDecimals);
+            amountIn = new TokenAmount(token, rawAmountIn);
+            currencyOut = this.#SOL;
+        }
+
+        /*
+        {
+    "id": "a4aae838-46bd-44a9-9533-b42ba9faa057",
+    "success": true,
+    "version": "V1",
+    "data": {
+        "swapType": "BaseIn",
+        "inputMint": "C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S",
+        "inputAmount": "5000000000",
+        "outputMint": "So11111111111111111111111111111111111111112",
+        "outputAmount": "88531692",
+        "otherAmountThreshold": "88089033",
+        "slippageBps": 50,
+        "priceImpactPct": 0.01,
+        "routePlan": [
+            {
+                "poolId": "BhQgvhYpYVccRt5wJnxi13waXNaC3dJVcX6TjTNY9kee",
+                "inputMint": "C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S",
+                "outputMint": "So11111111111111111111111111111111111111112",
+                "feeMint": "C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S",
+                "feeRate": 25,
+                "feeAmount": "12500000",
+                "remainingAccounts": []
+            }
+        ]
+    }
+}
+         */
 
         const options = {
             poolKeys: poolKeys,
@@ -282,7 +323,7 @@ class Raydium {
             currencyOut: currencyOut,
             slippage: new Percent(10, 100),
         };
-        
+
         const {
             amountOut,
             minAmountOut,
@@ -291,6 +332,15 @@ class Raydium {
             priceImpact,
             fee
         } = Liquidity.computeAmountOut(options);
+
+        console.log('Computed Values:', {
+            amountOut: amountOut.toFixed(),
+            minAmountOut: minAmountOut.toFixed(),
+            currentPrice: currentPrice.toFixed(),
+            executionPrice: executionPrice.toFixed(),
+            priceImpact: priceImpact.toFixed(),
+            fee: fee.toFixed()
+        });
 
         return {
             amountIn,
@@ -447,6 +497,17 @@ class Raydium {
      * @returns {string|null} - The found log entry or null if not found.
      */
     #findLogEntry = (needle, logEntries) => logEntries.find(entry => entry.includes(needle)) || null;
+
+    async getTestMint(callback) {
+        const signature = "4VdUw8zE4Lr4Ha9W2cMLJhzEYaKKd3E3YAKZnRPYgh35mQePKhq3fM1xRKVifGpLAihEbLwH9CHJHA9wdyomaknh";
+        this.#poolKeys = await this.#getPoolKeysFromTX(signature);
+
+        // this.#poolsInfos.set(poolKeys.id, poolKeys);
+
+        // console.log(`New pool found: ${poolKeys.baseMint.toBase58()}, ${poolKeys.quoteMint.toBase58()}`);
+
+        callback(this.#poolKeys.baseMint.toBase58());
+    }
 }
 
 const RaydiumInstance = new Raydium();

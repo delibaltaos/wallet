@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'path';
 import fs from 'fs';
-import * as https from "node:https";
+import * as https from 'https';
 
 const args = process.argv.slice(2);
 const url = args[0];
@@ -17,6 +17,14 @@ if (!outputPath) {
     process.exit(1);
 }
 
+/**
+ * Downloads a file from the given URL to the specified output path.
+ *
+ * @param {string} url - The URL to download the file from.
+ * @param {string} outputPath - The local file path to save the downloaded file.
+ * @returns {Promise<void>} - A Promise that resolves when the file is downloaded.
+ * @throws {Error} - If there is an error downloading the file.
+ */
 const downloadFile = async (url, outputPath) => {
     const absoluteOutputPath = path.resolve(process.cwd(), outputPath);
 
@@ -31,4 +39,7 @@ const downloadFile = async (url, outputPath) => {
     });
 };
 
-downloadFile(url, outputPath).catch(error => { throw error; });
+downloadFile(url, outputPath).catch(error => {
+    console.error('Error downloading file:', error);
+    process.exit(1);
+});

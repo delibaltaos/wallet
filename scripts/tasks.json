@@ -1,47 +1,95 @@
 {
-  "packages": [
+  "init": [
     {
-      "title": "Install NPM dependencies",
-      "output": "Installing dependencies...",
-      "cmd": "npm",
-      "args": [
-        "install",
-        "dotenv",
-        "@raydium-io/raydium-sdk",
-        "ed25519-hd-key",
-        "bip39",
-        "pouchdb",
-        "pouchdb-find"
+      "title": "Initialize",
+      "tasks": [
+        {
+          "title": "Init Directories",
+          "cmd": "node",
+          "args": [
+            "./scripts/initDirectories"
+          ]
+        },
+        {
+          "title": "Installing Script Dependencies",
+          "cmd": "node",
+          "args": [
+            "./scripts/installDeps",
+            "winston",
+            "pouchdb",
+            "pouchdb-find"
+          ]
+        }
       ]
     }
   ],
 
-  "data" : [
+  "data": [
     {
-      "title": "Downloading Pool Data From Raydium",
-      "cmd": "node",
-      "args": [
-        "./scripts/download.js",
-        "https://api.raydium.io/v2/sdk/liquidity/mainnet.json",
-        "./data/jsons/pools.json"
-      ]
-    },
-    {
-      "title": "Downloading tokens JSON from Raydium",
-      "cmd": "node",
-      "args": [
-        "./scripts/download.js",
-        "https://api.raydium.io/v2/sdk/token/raydium.mainnet.json",
-        "./data/jsons/tokens.json"
+      "title": "Download JSONs from Raydium",
+      "tasks": [
+        {
+          "title": "Downloading Pool Data",
+          "cmd": "node",
+          "args": [
+            "./scripts/download",
+            "https://api.raydium.io/v2/sdk/liquidity/mainnet.json",
+            "./data/jsons/pools.json"
+          ]
+        },
+        {
+          "title": "Downloading Tokens Data",
+          "cmd": "node",
+          "args": [
+            "./scripts/download",
+            "https://api.raydium.io/v2/sdk/token/raydium.mainnet.json",
+            "./data/jsons/tokens.json"
+          ]
+        }
       ]
     }
   ],
 
-  "db": [{
-    "title": "Initialize DB",
-    "cmd": "node",
-    "args": [
-      "./scripts/db.js"
-    ]
-  }]
+  "db": [
+    {
+      "title": "Initialize DB",
+      "tasks": [
+        {
+          "title": "Initializing Pool DB",
+          "cmd": "node",
+          "args" : [
+            "./scripts/db",
+            "pools"
+          ]
+        },
+        {
+          "title": "Initializing Tokens DB",
+          "cmd": "node",
+          "args" : [
+            "./scripts/db",
+            "tokens"
+          ]
+        }
+      ]
+    }
+  ],
+
+  "finish": [
+    {
+      "title": "Dependencies",
+      "tasks": [
+        {
+          "title": "Installing dependencies",
+          "cmd": "node",
+          "args": [
+            "./scripts/installDeps",
+            "dotenv",
+            "@raydium-io/raydium-sdk",
+            "ed25519-hd-key",
+            "bip39"
+          ]
+        }
+      ]
+    }
+  ]
 }

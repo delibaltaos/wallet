@@ -1,52 +1,75 @@
-import { execa } from 'execa';
+import {execa} from 'execa';
 import Listr from 'listr';
+import {config} from './config.js';
+import logger from "./logger.js";
 
-class Tasks {
-    #listr;
-    constructor(taskData) {
-        const { packages, data, db } = taskData;
 
-        const packagesTasks = packages.map(item => {
+const generateTasks2 = (tasks) => {
+    return tasks.map(({ title, cmd, args, tasks: subTasks }) => {
+        if (subTasks) {
             return {
-                title: item.title,
-                task: async (ctx, task) => {
-                    task.output = item.output;
-                    await execa(item.cmd, item.args);
-                }
-            }
-        });
-
-        const dataTasks = data.map((item) => {
+                title,
+                task: () => new Listr(generateTasks2(subTasks), { concurrent: true })
+            };
+        } else {
             return {
-                title: item.title,
+                title,
                 task: async (ctx, task) => {
-                    task.output = item.output;
-                    await execa(item.cmd, item.args);
+                    try {
+                        await execa(cmd, args);
+                    } catch (error) {
+                        task.skip(`Failed: ${error.message}`);
+                        throw error;
+                    }
                 }
-            }
-        });
+            };
+        }
+    });
+};
+/**
+ * Generates an array of tasks based on provided task data.
+ *
+ * @param {Object} taskData - The task data object containing multiple tasks.
+ * @param taskNames {Array}
+ * @returns {Array} - An array of tasks.
+ */
+const generateTasks = (taskData, taskNames) => {
 
-        const dbTasks = db.map((item) => {
-            return {
-                title: item.title,
+    Object.entries(taskData).flatMap(([key, tasks]) =>
+        tasks.map(
+            ({ title, output, cmd, args, required }) => ({
+                title,
+                skip: () => required ? false : taskNames && taskNames.length > 0 ? !taskNames.includes(key) : false,
                 task: async (ctx, task) => {
-                    task.output = item.output;
-                    await execa(item.cmd, item.args);
+                    task.output = output;
+                    try {
+                        await execa(cmd, args);
+                    } catch (error) {
+                        console.error(`Error executing task "${title}":`, error);
+                        throw error;
+                    }
                 }
-            }
-        });
-
-        this.#listr = new Listr();
-        this.#listr.add(packagesTasks);
-        this.#listr.add(dataTasks);
-        this.#listr.add(dbTasks);
-    }
-
-    run = () => {
-        this.#listr.run().catch(error => {
-            console.error(error);
-        });
-    }
+            })
+        )
+    );
 }
 
-export default Tasks;
+
+/**
+ * Runs the specified task asynchronously.
+ *
+ * @returns {Promise<void>} - A promise that resolves when the task is completed.
+ * @throws {Error} - If an error occurs while running the task.
+ * @param taskNames {Array}
+ */
+export const runTasks = async (taskNames) => {
+    try {
+        logger.info('Starting running tasks...');
+        const taskData = await config.taskData();
+        const tasks = generateTasks2(Object.values(taskData).flat());
+        await new Listr(tasks).run();
+    } catch (error) {
+        logger.error('Error running tasks:', error);
+        throw error;
+    }
+};

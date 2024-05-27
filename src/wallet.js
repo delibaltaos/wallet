@@ -11,6 +11,11 @@ class Wallet {
     #callback;
     #tokens;
     constructor() {
+        /*DB.getPool("4MpaZdsrdWzP2M5DLFCBhWu1SRpP7DhoBgPqkM3u5xdV").then(result => {
+            console.log(result)
+        }).catch(error => {
+            console.log(error)
+        })*/
 
         /*listenMyLogs(async logs => {
             const transactions = await getParsedTransaction(logs.signature);
@@ -24,18 +29,26 @@ class Wallet {
             }
         });*/
 
+        Raydium.getMinAmount('48AEwauAHsJibyt3WqjQ6EoHnFBcnyHASfo7vB2eCXPS', 5000, false).then(result => {
+            console.log(result);
+        }).catch(error => {
+            console.log(error);
+        })
+
         /*(async  () => {
             this.#tokens = await this.#getMyTokens();
             await this.#try2Sell();
         })();*/
 
         /*Raydium.listenNewTokens(token => {
-            this.buy(token, 0.001).then(result => {
+
+        });*/
+
+        /*this.buy(token, 0.001).then(result => {
                 console.log(result);
             }).catch(error => {
                 console.log(error);
-            })
-        });*/
+            })*/
 
         /*this.soldTokens().then(result => {
             console.log(result);

@@ -21,15 +21,7 @@ class DB {
     }
 
     async getWallet(address) {
-        try {
-            return await this.#wallet.get(address);
-        } catch (error) {
-            if (error.status === 404) {
-                console.log(`Wallet not found: ${address}`);
-            } else {
-                console.error(`Error getting wallet ${address}:`, error);
-            }
-        }
+        return await this.#wallet.get(address);
     }
 
     async putWallet(wallet) {
@@ -47,14 +39,26 @@ class DB {
         }
     }
 
+    /**
+     * Puts a pool into the data store using the provided id and pool object.
+     *
+     * @param {string} id - The id of the pool.
+     * @param {Object} pool - The pool object to be stored.
+     * @returns {Promise} - A promise that resolves when the pool is successfully stored.
+     */
     putPool = async (id, pool) => {
         const obj = {_id: id, ...pool}
 
-        const result = await this.#pools.put(obj).catch((error) => {
-            console.log(error);
-        });
-        return result;
+        return await this.#pools.put(obj);
     };
+
+
+    /**
+     * Retrieves a pool based on the provided baseMint.
+     *
+     * @param {String} baseMint - The baseMint value used to filter the pools.
+     * @returns {Promise<Object|null>} - The pool object matching the baseMint, or null if no matches were found.
+     */
     getPool = async baseMint => {
         const result = await this.#pools.find({
             selector: {
@@ -62,11 +66,14 @@ class DB {
             }
         });
 
-        return result;
+        return result.docs?.[0];
     }
 
     putToken = async token => await this.#tokens.put({_id: token.mint, ...token});
-    getToken = mint => this.#tokens.get(mint);
+
+    getToken = mint => {
+        return ""
+    }
 }
 
 const DBInstance = new DB();
