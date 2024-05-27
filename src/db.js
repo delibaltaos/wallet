@@ -42,14 +42,13 @@ class DB {
     /**
      * Puts a pool into the data store using the provided id and pool object.
      *
-     * @param {string} id - The id of the pool.
      * @param {Object} pool - The pool object to be stored.
      * @returns {Promise} - A promise that resolves when the pool is successfully stored.
      */
-    putPool = async (id, pool) => {
-        const obj = {_id: id, ...pool}
-
-        return await this.#pools.put(obj);
+    putPool = async pool => {
+        return await this.#pools.put({_id: pool.id, ...pool}).catch(error => {
+            console.log(error);
+        });
     };
 
 

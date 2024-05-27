@@ -82,7 +82,8 @@ class Raydium {
                     pool.quoteMint = baseMint;
                 }
 
-                await DB.putPool(pool.id.toString(), JSON.stringify(pool));
+                const poolKeys = JSON.parse(JSON.stringify(pool));
+                await DB.putPool(poolKeys);
 
                 this.#newTokenCallback(baseMint.toBase58());
             } catch (error) {
@@ -259,11 +260,6 @@ class Raydium {
         let poolInfo = this.#poolInfos[poolKeys.id.toBase58()];
 
         if (!poolInfo) {
-            const programId = {
-                4: new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'), // V4 Program Kimliği
-                5: new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8')  // V5 Program Kimliği
-            };
-            // const result = await Liquidity.fetchAllPoolKeys(connection, programId);
             poolInfo = await Liquidity.fetchInfo({
                 connection: connection,
                 poolKeys: poolKeys
@@ -283,38 +279,11 @@ class Raydium {
             // const t = await DB.getPool(poolKeys.baseMint.toBase58());
 
             const token = new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolInfo.lpDecimals);
-            amountIn = new TokenAmount(token, rawAmountIn);
+            amountIn = new TokenAmount(token,
+                rawAmountIn * Math.pow(10, 6)
+            );
             currencyOut = this.#SOL;
         }
-
-        /*
-        {
-    "id": "a4aae838-46bd-44a9-9533-b42ba9faa057",
-    "success": true,
-    "version": "V1",
-    "data": {
-        "swapType": "BaseIn",
-        "inputMint": "C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S",
-        "inputAmount": "5000000000",
-        "outputMint": "So11111111111111111111111111111111111111112",
-        "outputAmount": "88531692",
-        "otherAmountThreshold": "88089033",
-        "slippageBps": 50,
-        "priceImpactPct": 0.01,
-        "routePlan": [
-            {
-                "poolId": "BhQgvhYpYVccRt5wJnxi13waXNaC3dJVcX6TjTNY9kee",
-                "inputMint": "C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S",
-                "outputMint": "So11111111111111111111111111111111111111112",
-                "feeMint": "C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S",
-                "feeRate": 25,
-                "feeAmount": "12500000",
-                "remainingAccounts": []
-            }
-        ]
-    }
-}
-         */
 
         const options = {
             poolKeys: poolKeys,
