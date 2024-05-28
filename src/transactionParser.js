@@ -5,7 +5,7 @@ export const getActivity = transaction => {
         instruction => instruction.parsed?.type === "transfer"
     );
 
-    if (transfers.length > 0) {
+    if (transfers?.length > 0) {
         const tokenDetail = transaction.meta.postTokenBalances.find(
             item => item.owner === MyPublicKey.toString()
         );

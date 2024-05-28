@@ -1,5 +1,4 @@
 import Token from './token.js';
-import DB from './db.js';
 
 import { delay, calculatePercentageDifference } from './utils.js';
 
@@ -10,13 +9,8 @@ import { getActivity } from './transactionParser.js';
 class Wallet {
     #callback;
     #tokens;
-    constructor() {
-        // DB.getPool("6DK9gDy8R4TjxUVY4bfceeUpxVQmR627RTCmPQVbFoWT").then(result => {
-        //     console.log(result)
-        // }).catch(error => {
-        //     console.log(error)
-        // })
 
+    constructor() {
         listenMyLogs(async logs => {
             const transactions = await getParsedTransaction(logs.signature);
             const result = getActivity(transactions);
@@ -24,28 +18,27 @@ class Wallet {
             if (result?.type === "buy") {
                 this.#tokens = await this.#getMyTokens();
                 const token = this.#tokens.find(token => token.mint === result.mint);
-                token.cost = result.cost;
+                if (result.cost) {
+                    token.cost = result.cost;
+                }
             }
         });
 
-        (async  () => {
-            this.#tokens = await this.#getMyTokens();
-            await this.#try2Sell();
-        })();
+        // (async () => {
+        //     this.#tokens = await this.#getMyTokens();
+        //     await this.#try2Sell();
+        // })();
 
-        // Raydium.listenNewTokens(token => {
-        //     console.log(token);
+        // Raydium.listenNewTokens(async token => {
+        //     await this.buy(token, 0.01);
         // });
-    }
 
-    // soldTokens = async () => {
-    //     const mint = '4MpaZdsrdWzP2M5DLFCBhWu1SRpP7DhoBgPqkM3u5xdV';
-    //     // const amount = await Raydium.getMinAmount(mint, 30000, false);
-    //     // console.log(amount);
-    //    await Raydium.swap(mint, 1000, false);
-    //    await delay(1000);
-    //    this.soldTokens();
-    // }
+        this.#swap("DJ6FN3LsDSnqXpZwMfebihKNan4DnMeZ5Kg5tufUVsZz", 100, true).then(result => {
+            console.log(result);
+        }).catch(error => {
+            console.log(error);
+        })
+    }
 
     listenNewTokens = callback =>
         Raydium.getTestMint(callback);
@@ -54,21 +47,30 @@ class Wallet {
         this.#callback = callback;
 
     #try2Sell = async () => {
-        for(const token of this.#tokens) {
-            if (token.cost > 0) {
-                const { amountOut, priceImpact } = await Raydium.getMinAmount(token.mint, token.amount, false);
-                if (priceImpact > 0.99) {
-                    // rugpull
-                } else {
+        for (const token of this.#tokens) {
+            try {
+                const rpAmount = parseInt(token.amount / 100);
+                const { priceImpact, amountOut } = await Raydium.getMinAmount(token.mint, rpAmount, false, 50);
+
+                console.log(`getMinAmount : ${token.mint}, amountOut: ${amountOut}, priceImapact : ${priceImpact}`);
+
+                if (priceImpact > 90 && amountOut >= 0.0001) {
+                    await this.sell(token.mint, rpAmount, 50);
+                }
+
+                else if (token.cost && token.cost > 0) {
+                    const { amountOut } = await Raydium.getMinAmount(token.mint, token.amount, false);
                     const diff = calculatePercentageDifference(token.cost, amountOut);
                     if (diff > 10) {
                         await this.sell(token.mint, token.amount);
                     }
                 }
+            } catch (error) {
+                console.log(error);
             }
         }
 
-        await delay(2000);
+        await delay(5000);
         this.#try2Sell();
     }
 
@@ -94,12 +96,13 @@ class Wallet {
             });
     }
 
-    buy = async (mint, amount) => await this.#swap(mint, amount, true);
-    sell = async (mint, amount) => await this.#swap(mint, amount, false);
+    buy = async (mint, amount, slippage) => await this.#swap(mint, amount, true, slippage);
+    sell = async (mint, amount, slippage) => await this.#swap(mint, amount, false, slippage);
 
-    async #swap(mint, amount, isBuy) {
+    async #swap(mint, amount, isBuy, slippage) {
+        console.log("try to swap for ", mint, amount, isBuy, slippage);
         try {
-            await Raydium.swap(mint, amount, isBuy)
+            await Raydium.swap(mint, amount, isBuy, slippage)
                 .catch(error => {
                     // raydium.io -> web3.js -> simulateMultipleInstruction
                     console.log(error);

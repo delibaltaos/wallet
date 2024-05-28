@@ -65,9 +65,7 @@ class DB {
      * @param {Object} pool - The pool object to be stored.
      * @returns {Promise} - A promise that resolves when the pool is successfully stored.
      */
-    putPool = async pool => {
-        return await this.#pools.put({_id: pool.id, ...pool});
-    };
+    putPool = async pool => await this.#pools.put({_id: pool.id, ...pool});
 
     /**
      * Retrieves a pool based on the provided baseMint.

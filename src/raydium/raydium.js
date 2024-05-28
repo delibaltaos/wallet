@@ -29,15 +29,13 @@ class Raydium {
 
     #userTokenAccounts;
     #newTokenCallback;
-
+    #slippage;
     constructor() {
         this.#getOwnerTokenAccounts().then(userTokenAccounts =>
             this.#userTokenAccounts = userTokenAccounts
         );
 
-        // this.#getToken('5xy7ckQrm7gziUegDqce9bUZ4KTBog25xzx8hsz5NJCm').then(token => {
-        //     console.log(token);
-        // });
+        this.#slippage = new Percent(10, 100);
     }
 
     /**
@@ -86,6 +84,7 @@ class Raydium {
                 } else {
                     this.#newTokenCallback(baseMint.toBase58());
                 }
+
             } catch (error) {
                 console.log(`error : ${error}, signature: ${signature}`);
             }
@@ -106,7 +105,7 @@ class Raydium {
     }
 
     #getIdFromParsedTransaction = parsedTransaction => {
-        const initInstruction = parsedTransaction.transaction.message.instructions.find(
+        const initInstruction = parsedTransaction?.transaction?.message?.instructions?.find(
             instruction => instruction.programId.equals(RAYDIUM_POOL_V4_PROGRAM_ID)
         );
 
@@ -133,9 +132,9 @@ class Raydium {
         }
     }
 
-    async #getToken(mint) {
+    async #getToken(poolKeys) {
+        const mint = poolKeys.baseMint.equals(Token.WSOL)
         const tokenRecord = await DB.getToken(mint);
-
         if (tokenRecord) {
             return new Token(
                 TOKEN_PROGRAM_ID,
@@ -147,11 +146,11 @@ class Raydium {
         }
     }
 
-    getMinAmount = async (baseMint, amount, isBuy) => {
+    getMinAmount = async (baseMint, amount, isBuy, slippage) => {
         const pool = await this.#getPool(baseMint);
         const token = await this.#getToken(baseMint);
 
-        const { amountOut, priceImpact } = await this.#getTokenAmount(token, pool, amount, isBuy);
+        const { amountOut, priceImpact } = await this.#getTokenAmount(token, pool, amount, isBuy, slippage);
 
         return {
             amountOut: amountOut.toFixed(),
@@ -176,15 +175,22 @@ class Raydium {
         return this.#poolInfos[poolKeys.id];
     }
 
-    async swap(baseMint, amount, isBuy, slippage = 1) {
+    async swap(baseMint, amount, isBuy, slippage) {
         if (this.#userTokenAccounts === undefined) {
             this.#userTokenAccounts = await this.#getOwnerTokenAccounts();
         }
 
         const pool = await this.#getPool(baseMint);
+        const t = new Token(
+            TOKEN_PROGRAM_ID,
+            tokenRecord.mint,
+            tokenRecord.decimals,
+            (tokenRecord?.symmbol || "Unknown"),
+            (tokenRecord?.name || "Unknown")
+        );
         const token = await this.#getToken(baseMint);
 
-        const { amountIn, amountOut } = await this.#getTokenAmount(token, pool, amount, isBuy);
+        const { amountIn, amountOut } = await this.#getTokenAmount(token, pool, amount, isBuy, slippage);
 
         const { poolKeys } = pool;
         if (parseFloat(amountOut.toFixed()) < 0)
@@ -247,9 +253,23 @@ class Raydium {
         let poolKeys = this.#poolKeys[baseMint];
 
         if (!poolKeys) {
-            const { _id, _rev, ...pool } = await DB.getPool(baseMint);
-            poolKeys = pool;
-            this.#poolKeys[pool.baseMint] = poolKeys;
+            const result = await DB.getPool(baseMint);
+
+            if (!result) {
+                const result = await getNewMint(baseMint);
+                if (result?.id) {
+                    const id = new PublicKey(result.id);
+                    const newPoolKeys = await this.#getPoolKeysFromId(id);
+                    const newPoolKeysJSON = JSON.parse(JSON.stringify(newPoolKeys));
+                    await DB.putPool(newPoolKeysJSON);
+                    poolKeys = newPoolKeys;
+                }
+            } else {
+                const { _id, _rev, ...pool } = result;
+                poolKeys = pool;
+            }
+
+            this.#poolKeys[baseMint] = poolKeys;
         }
 
         if (poolKeys) {
@@ -284,9 +304,15 @@ class Raydium {
         }
     }
 
-    async #getTokenAmount(token, pool, amount, isBuy) {
+    async #getTokenAmount(token, pool, amount, isBuy, slippage) {
         let amountIn,
             currencyOut;
+
+        let _slp = this.#slippage;
+
+        if (slippage) {
+            _slp = new Percent(slippage, 100);
+        }
 
         const { poolKeys, poolInfo } = pool;
 
@@ -303,7 +329,7 @@ class Raydium {
             poolInfo: poolInfo,
             amountIn: amountIn,
             currencyOut: currencyOut,
-            slippage: new Percent(1, 100),
+            slippage: _slp,
         };
 
         const {
