@@ -20,6 +20,26 @@ class DB {
         this.#wallet = new PouchDB(walletDBPath);
     }
 
+    async #buildIndex() {
+        try {
+            await this.#pools.createIndex({
+                index: {fields: ['baseMint']}
+            });
+
+            await this.#pools.createIndex({
+                index: {fields: ['quoteMint']}
+            });
+
+            await this.#pools.createIndex({
+                index: {fields: ['baseMint', 'quoteMint']}
+            });
+
+            console.log('Indexes created successfully');
+        } catch (err) {
+            console.error('Error creating indexes:', err);
+        }
+    }
+
     async getWallet(address) {
         return await this.#wallet.get(address);
     }
@@ -46,33 +66,41 @@ class DB {
      * @returns {Promise} - A promise that resolves when the pool is successfully stored.
      */
     putPool = async pool => {
-        return await this.#pools.put({_id: pool.id, ...pool}).catch(error => {
-            console.log(error);
-        });
+        return await this.#pools.put({_id: pool.id, ...pool});
     };
-
 
     /**
      * Retrieves a pool based on the provided baseMint.
      *
-     * @param {String} baseMint - The baseMint value used to filter the pools.
+     * @param {String} mint - The mint value used to filter the pools.
      * @returns {Promise<Object|null>} - The pool object matching the baseMint, or null if no matches were found.
      */
-    getPool = async baseMint => {
-        const result = await this.#pools.find({
+    getPool = async mint => {
+        let result = await this.#pools.find({
             selector: {
-                baseMint: baseMint
+                baseMint: mint
             }
         });
 
-        return result.docs?.[0];
-    }
+        if (result.docs.length > 0) {
+            return result.docs[0];
+        }
+
+        result = await this.#pools.find({
+            selector: {
+                quoteMint: mint
+            }
+        });
+
+        if (result.docs.length > 0) {
+            return result.docs[0];
+        }
+
+        return undefined;
+    };
 
     putToken = async token => await this.#tokens.put({_id: token.mint, ...token});
-
-    getToken = mint => {
-        return ""
-    }
+    getToken = async mint => this.#tokens.get(mint);
 }
 
 const DBInstance = new DB();

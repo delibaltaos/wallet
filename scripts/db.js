@@ -67,14 +67,15 @@ const initializePoolKeys = async () => {
             if (pools[category]) {
                 for (const pool of pools[category]) {
                     try {
-                        if (pool.baseMint === SOLMint) {
+                        await DB.put({_id: pool.id, ...pool});
+                        /*if (pool.baseMint === SOLMint) {
                             let poolData = pool;
                             poolData.baseMint = poolData.quoteMint;
                             poolData.quoteMint = SOLMint;
                             await DB.put({_id: pool.id, ...poolData});
                         } else {
-                            await DB.put({_id: pool.id, ...pool});
-                        }
+
+                        }*/
                     } catch (error) {
                         if (error.status !== 409) {
                             console.error(`Error adding pool ${pool.baseMint}:`, error);
@@ -86,6 +87,10 @@ const initializePoolKeys = async () => {
 
         await DB.createIndex({
             index: {fields: ['baseMint']}
+        });
+
+        await DB.createIndex({
+            index: {fields: ['quoteMint']}
         });
 
     } catch (error) {

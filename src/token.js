@@ -59,6 +59,10 @@ class Token {
     get mint() {
         return this.#mint;
     }
+
+    get tokenObj() {
+        //
+    }
 }
 
 export default Token;

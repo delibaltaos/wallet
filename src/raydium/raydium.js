@@ -14,30 +14,30 @@ import {
 } from "./raydium-birdge.cjs";
 import BN from "bn.js";
 
-import {LAMPORTS_PER_SOL, PublicKey} from "@solana/web3.js";
-import {connection, payer, RAYDIUM_POOL_V4_PROGRAM_ID, TXVersion} from "../config.js";
-import {listenLogs} from "../connection.js";
+// poolKeys2JsonInfo
+// jsonInfo2PoolKeys
+// Price
+import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import { connection, payer, RAYDIUM_POOL_V4_PROGRAM_ID, TXVersion } from "../config.js";
+import { listenLogs } from "../connection.js";
 import DB from "../db.js";
+import { getNewMint } from "./mint.js";
 
 class Raydium {
-    /**
-     * The SOL mint address.
-     * @private
-     * @type {string}
-     */
-    #SOL_MINT = "So11111111111111111111111111111111111111112";
-
-    #poolsInfos = new Map();
-
     #poolKeys = {};
     #poolInfos = {};
 
-    #SOL;
     #userTokenAccounts;
     #newTokenCallback;
+
     constructor() {
-        const sol = new PublicKey(this.#SOL_MINT);
-        this.#SOL = new Token(TOKEN_PROGRAM_ID, sol, 6, "SOL", "Solana");
+        this.#getOwnerTokenAccounts().then(userTokenAccounts =>
+            this.#userTokenAccounts = userTokenAccounts
+        );
+
+        // this.#getToken('5xy7ckQrm7gziUegDqce9bUZ4KTBog25xzx8hsz5NJCm').then(token => {
+        //     console.log(token);
+        // });
     }
 
     /**
@@ -51,7 +51,6 @@ class Raydium {
 
         listenLogs(RAYDIUM_POOL_V4_PROGRAM_ID, this.#parseTxLogs);
     }
-
 
     /**
      * Parses transaction logs and performs actions based on the logs and signature.
@@ -75,17 +74,18 @@ class Raydium {
                 const baseMint = pool.baseMint;
                 const quoteMint = pool.quoteMint;
 
-                console.log(`New pool found: ${baseMint.toBase58()}, ${quoteMint.toBase58()}`);
+                // const result = await getNewMint(baseMint.toBase58());
 
-                if (baseMint.toBase58() === "So11111111111111111111111111111111111111112") {
-                    pool.baseMint = quoteMint;
-                    pool.quoteMint = baseMint;
-                }
+                console.log(`New pool found: ${baseMint.toBase58()}, ${quoteMint.toBase58()}`);
 
                 const poolKeys = JSON.parse(JSON.stringify(pool));
                 await DB.putPool(poolKeys);
 
-                this.#newTokenCallback(baseMint.toBase58());
+                if (baseMint.toBase58() === "So11111111111111111111111111111111111111112") {
+                    this.#newTokenCallback(quoteMint.toBase58());
+                } else {
+                    this.#newTokenCallback(baseMint.toBase58());
+                }
             } catch (error) {
                 console.log(`error : ${error}, signature: ${signature}`);
             }
@@ -123,40 +123,71 @@ class Raydium {
         return id;
     }
 
+    async #getPool(mint) {
+        const poolKeys = await this.#getPoolKeys(mint);
+        const poolInfo = await this.#getPoolInfo(poolKeys);
+
+        return {
+            poolKeys,
+            poolInfo
+        }
+    }
+
+    async #getToken(mint) {
+        const tokenRecord = await DB.getToken(mint);
+
+        if (tokenRecord) {
+            return new Token(
+                TOKEN_PROGRAM_ID,
+                tokenRecord.mint,
+                tokenRecord.decimals,
+                (tokenRecord?.symmbol || "Unknown"),
+                (tokenRecord?.name || "Unknown")
+            );
+        }
+    }
+
     getMinAmount = async (baseMint, amount, isBuy) => {
-        if (this.#userTokenAccounts === undefined) {
-            this.#userTokenAccounts = await this.#getOwnerTokenAccounts().catch((error) => {
-                console.log('error:', error);
-                throw error;
+        const pool = await this.#getPool(baseMint);
+        const token = await this.#getToken(baseMint);
+
+        const { amountOut, priceImpact } = await this.#getTokenAmount(token, pool, amount, isBuy);
+
+        return {
+            amountOut: amountOut.toFixed(),
+            priceImpact: priceImpact.toFixed()
+        }
+    }
+
+    async #getPoolInfo(poolKeys) {
+        let poolInfo = this.#poolInfos[poolKeys.id];
+
+        if (!poolInfo) {
+            poolInfo = await Liquidity.fetchInfo({
+                connection: connection,
+                poolKeys: poolKeys
+            }).catch(error => {
+                console.log(error);
             });
+
+            this.#poolInfos[poolKeys.id] = poolInfo;
         }
 
-        const poolKeys = await this.#getPoolKeys(baseMint);
-
-        const { minAmountOut } = await this.#getTokenAmount(poolKeys, amount, isBuy)
-
-        return minAmountOut.toFixed();
+        return this.#poolInfos[poolKeys.id];
     }
 
     async swap(baseMint, amount, isBuy, slippage = 1) {
-        if (this.#userTokenAccounts === undefined) { 
-            this.#userTokenAccounts = await this.#getOwnerTokenAccounts().catch((error) => {
-                console.log('error:', error);
-                throw error;
-            });
+        if (this.#userTokenAccounts === undefined) {
+            this.#userTokenAccounts = await this.#getOwnerTokenAccounts();
         }
 
-        const poolKeys = await this.#getPoolKeys(baseMint);
+        const pool = await this.#getPool(baseMint);
+        const token = await this.#getToken(baseMint);
 
-        const { amountIn, minAmountOut } = await this.#getTokenAmount(poolKeys, amount, isBuy, slippage).catch((error) => {
-            console.log('error:', error);
-            throw error;
-        });
+        const { amountIn, amountOut } = await this.#getTokenAmount(token, pool, amount, isBuy);
 
-        console.log('amountIn:', amountIn.toFixed());
-        console.log('minAmountOut:', minAmountOut.toFixed());
-        
-        if (parseFloat(minAmountOut.toFixed()) < 0) 
+        const { poolKeys } = pool;
+        if (parseFloat(amountOut.toFixed()) < 0)
             return;
 
         const instructionOptions = {
@@ -167,7 +198,7 @@ class Raydium {
                 owner: payer.publicKey,
             },
             amountIn: amountIn,
-            amountOut: minAmountOut,
+            amountOut: amountOut,
             fixedSide: 'in',
             makeTxVersion: TXVersion,
             config: {
@@ -188,7 +219,7 @@ class Raydium {
             makeTxVersion: TXVersion,
             payer: payer.publicKey,
             innerTransactions: innerTransactions,
-            addLookupTableInfo: LOOKUP_TABLE_CACHE,
+            addLookupTableInfo: LOOKUP_TABLE_CACHE
         }).catch((error) => {
             console.log('error:', error);
             throw error;
@@ -253,36 +284,18 @@ class Raydium {
         }
     }
 
-    async #getTokenAmount(poolKeys, rawAmountIn, isBuy) {
+    async #getTokenAmount(token, pool, amount, isBuy) {
         let amountIn,
             currencyOut;
 
-        let poolInfo = this.#poolInfos[poolKeys.id.toBase58()];
-
-        if (!poolInfo) {
-            poolInfo = await Liquidity.fetchInfo({
-                connection: connection,
-                poolKeys: poolKeys
-            }).catch(error => {
-                console.log(error);
-            });
-
-            this.#poolInfos[poolKeys.id.toBase58()] = poolInfo;
-        }
+        const { poolKeys, poolInfo } = pool;
 
         if (isBuy) {
-            amountIn = new TokenAmount(this.#SOL, rawAmountIn * LAMPORTS_PER_SOL);
-            currencyOut = new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolKeys.baseDecimals.toNumber());
-        }
-
-        else {
-            // const t = await DB.getPool(poolKeys.baseMint.toBase58());
-
-            const token = new Token(TOKEN_PROGRAM_ID, poolKeys.baseMint, poolInfo.lpDecimals);
-            amountIn = new TokenAmount(token,
-                rawAmountIn * Math.pow(10, 6)
-            );
-            currencyOut = this.#SOL;
+            amountIn = new TokenAmount(Token.WSOL, amount * LAMPORTS_PER_SOL);
+            currencyOut = token;
+        } else {
+            amountIn = new TokenAmount(token, amount * Math.pow(10, token.decimals));
+            currencyOut = Token.WSOL;
         }
 
         const options = {
@@ -290,7 +303,7 @@ class Raydium {
             poolInfo: poolInfo,
             amountIn: amountIn,
             currencyOut: currencyOut,
-            slippage: new Percent(10, 100),
+            slippage: new Percent(1, 100),
         };
 
         const {
@@ -301,15 +314,6 @@ class Raydium {
             priceImpact,
             fee
         } = Liquidity.computeAmountOut(options);
-
-        console.log('Computed Values:', {
-            amountOut: amountOut.toFixed(),
-            minAmountOut: minAmountOut.toFixed(),
-            currentPrice: currentPrice.toFixed(),
-            executionPrice: executionPrice.toFixed(),
-            priceImpact: priceImpact.toFixed(),
-            fee: fee.toFixed()
-        });
 
         return {
             amountIn,

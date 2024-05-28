@@ -4,7 +4,6 @@ import {derivePath} from 'ed25519-hd-key';
 import bip39 from 'bip39';
 
 export const connection = new Connection(process.env.RPC_URL, 'confirmed');
-// export const SOL_TOKEN = new Token(TOKEN_PROGRAM_ID, 'So11111111111111111111111111111111111111112', 6);
 export const TXVersion = process.env.TX_VERSION === "VERSIONED" ? 0 : 1;
 export const payer = getPayer();
 export const MyPublicKey = payer.publicKey;

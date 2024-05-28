@@ -11,13 +11,13 @@ class Wallet {
     #callback;
     #tokens;
     constructor() {
-        /*DB.getPool("DYJT5ZcyjUYDDoFRbhb1mo4nWuFixLJyiPep8iwBMJ35").then(result => {
-            console.log(result)
-        }).catch(error => {
-            console.log(error)
-        })*/
+        // DB.getPool("6DK9gDy8R4TjxUVY4bfceeUpxVQmR627RTCmPQVbFoWT").then(result => {
+        //     console.log(result)
+        // }).catch(error => {
+        //     console.log(error)
+        // })
 
-        /*listenMyLogs(async logs => {
+        listenMyLogs(async logs => {
             const transactions = await getParsedTransaction(logs.signature);
             const result = getActivity(transactions);
 
@@ -25,57 +25,27 @@ class Wallet {
                 this.#tokens = await this.#getMyTokens();
                 const token = this.#tokens.find(token => token.mint === result.mint);
                 token.cost = result.cost;
-                console.log(token);
             }
-        });*/
+        });
 
-        /*Raydium.getMinAmount('C3JX9TWLqHKmcoTDTppaJebX2U7DcUQDEHVSmJFz6K6S', 1, false).then(result => {
-            console.log(result);
-        }).catch(error => {
-            console.log(error);
-        })*/
-
-        /*(async  () => {
+        (async  () => {
             this.#tokens = await this.#getMyTokens();
             await this.#try2Sell();
-        })();*/
+        })();
 
-        /*Raydium.listenNewTokens(token => {
-
-        });*/
-
-        /*this.buy(token, 0.001).then(result => {
-                console.log(result);
-            }).catch(error => {
-                console.log(error);
-            })*/
-
-        /*this.soldTokens().then(result => {
-            console.log(result);
-        }).catch(error => {
-            console.log(error);
-        });*/
-
-        // Raydium.getTestMint(async baseMint => {
-        //     console.log(baseMint)
-        // });
-        // const tokens = this.#getMyTokens().then(tokens => {
-        // }).catch(error => {
-        //     console.log("Error: ", error);
-        // });
-        // listenMyLogs(async logs => {
-        //     console.log(logs);
+        // Raydium.listenNewTokens(token => {
+        //     console.log(token);
         // });
     }
 
-    soldTokens = async () => {
-        const mint = '4MpaZdsrdWzP2M5DLFCBhWu1SRpP7DhoBgPqkM3u5xdV';
-        // const amount = await Raydium.getMinAmount(mint, 30000, false);
-        // console.log(amount);
-       await Raydium.swap(mint, 1000, false);
-       await delay(1000);
-       this.soldTokens();
-    }
+    // soldTokens = async () => {
+    //     const mint = '4MpaZdsrdWzP2M5DLFCBhWu1SRpP7DhoBgPqkM3u5xdV';
+    //     // const amount = await Raydium.getMinAmount(mint, 30000, false);
+    //     // console.log(amount);
+    //    await Raydium.swap(mint, 1000, false);
+    //    await delay(1000);
+    //    this.soldTokens();
+    // }
 
     listenNewTokens = callback =>
         Raydium.getTestMint(callback);
@@ -86,8 +56,15 @@ class Wallet {
     #try2Sell = async () => {
         for(const token of this.#tokens) {
             if (token.cost > 0) {
-                const price = await Raydium.getMinAmount(token.mint, token.amount, false);
-                console.log(price);
+                const { amountOut, priceImpact } = await Raydium.getMinAmount(token.mint, token.amount, false);
+                if (priceImpact > 0.99) {
+                    // rugpull
+                } else {
+                    const diff = calculatePercentageDifference(token.cost, amountOut);
+                    if (diff > 10) {
+                        await this.sell(token.mint, token.amount);
+                    }
+                }
             }
         }
 

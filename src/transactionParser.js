@@ -1,7 +1,7 @@
 import { MyPublicKey } from './config.js';
 
 export const getActivity = transaction => {
-    const transfers = transaction.transaction.message.instructions.filter(
+    const transfers = transaction?.transaction?.message?.instructions?.filter(
         instruction => instruction.parsed?.type === "transfer"
     );
 
