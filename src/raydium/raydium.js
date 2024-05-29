@@ -181,7 +181,7 @@ class Raydium {
                 const poolKeys = JSON.parse(JSON.stringify(pool));
                 await DB.putPool(poolKeys);
 
-                await delay(2000);
+                await delay(10000);
                 if (baseMint.toBase58() === "So11111111111111111111111111111111111111112") {
                     this.#newTokenCallback(quoteMint.toBase58());
                 } else {

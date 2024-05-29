@@ -1,6 +1,6 @@
 import Token from './token.js';
 
-import {delay, calculatePercentageDifference} from './utils.js';
+import { delay, calculatePercentageDifference } from './utils.js';
 
 import Raydium from "./raydium/raydium.js";
 import {
@@ -8,85 +8,66 @@ import {
     listenMyLogs,
     getParsedTransaction, getTransactions
 } from './connection.js';
-import {getActivity} from './transactionParser.js';
+import { getActivity } from './transactionParser.js';
 
 class Wallet {
     #callback;
     #tokens = [];
 
     constructor() {
-        listenMyLogs(async ({ signature }) => {
-            const transaction = await getParsedTransaction(signature);
-            const result = getActivity(transaction);
+        this.init();
+    }
 
-            if (result?.type === "buy") {
-                this.#tokens = await this.#getMyTokens();
-                const token = this.#tokens.find(token => token.mint === result.mint);
-                if (result.cost) {
-                    token.cost = result.cost;
-                }
-            }
-        });
-
-        Raydium.listenNewTokens(async mint =>
-            await this
-                .buy(mint, process.env.BUY_AMOUNT)
-        );
-
-        (async () => {
-            await this.#synchronize();
-            await delay(10000);
-            await this.#try2Sell();
-            setInterval(async () => await this.#synchronize(), 10000);
-        })();
+    async init() {
+        const ts = new Date().getTime();
+        await this.#synchronize();
+        await delay(10000);
+        await this.#try2Sell();
+        const elapsedTime = (new Date().getTime()) - ts;
+        console.log("paralell task finished about: ", elapsedTime, new Date().getTime());
+        await delay(5000);
+        this.init();
     }
 
     async #synchronize() {
-        try {
-            const tokens = await this.#getMyTokens();
+        console.log("synchronize called", new Date().getTime());
+        const tokens = await this.#getMyTokens();
+        const transactions = await getTransactions();
 
-            for (const token of tokens) {
-                const transactions = await getTransactions(token.mint);
-                transactions
-                    .map(transaction => getActivity(transaction))
-                    .forEach(activity => {
-                        const token = tokens.find(token => token.mint === activity.mint);
-                        if (activity.cost)
-                            token.cost = activity.cost;
-                    });
-            }
+        tokens.forEach(token => {
+            transactions.forEach(transaction => {
+                if (JSON.stringify(transaction).includes(token.mint)) {
+                    const activity = getActivity(transaction);
+                    if (activity?.mint && activity?.cost) {
+                        const foundToken = tokens.find(t => t.mint === activity.mint);
+                        if (foundToken) {
+                            foundToken.cost = activity.cost;
+                        }
+                    }
+                }
+            });
+        });
 
-            this.#tokens = tokens;
-        } catch (error) {
-            console.log(error);
-        }
+        this.#tokens = tokens;
     }
 
-    listenNewTokens = callback =>
-        Raydium.getTestMint(callback);
+    listenNewTokens = callback => Raydium.getTestMint(callback);
 
-    listenMyTokens = callback =>
-        this.#callback = callback;
+    listenMyTokens = callback => this.#callback = callback;
 
-    buy = async (mint, amount, slippage) =>
-        await this.#swap(mint, amount, true, slippage);
+    buy = async (mint, amount, slippage) => await this.#swap(mint, amount, true, slippage);
 
-    sell = async (mint, amount, slippage) =>
-        await this.#swap(mint, amount, false, slippage);
+    sell = async (mint, amount, slippage) => await this.#swap(mint, amount, false, slippage);
 
-    #try2Sell = async () => {
+    async #try2Sell() {
+        console.log("try2Sell called ", new Date().getTime());
         for (const token of this.#tokens) {
             try {
                 const rpAmount = parseInt((token.amount / 100).toFixed(0));
                 const {
                     priceImpact,
                     amountOut
-                } = await Raydium.getMinAmount(
-                    token.mint,
-                    rpAmount,
-                    false,
-                    50
-                );
+                } = await Raydium.getMinAmount(token.mint, rpAmount, false, 50);
 
                 console.log(`getMinAmount : ${token.mint}, amountOut: ${amountOut}, priceImpact : ${priceImpact}`);
 
@@ -94,25 +75,23 @@ class Wallet {
                     await this.sell(token.mint, rpAmount, 50);
                 }
 
-                else if (token.cost && token.cost > 0) {
-                    const {amountOut} = await Raydium.getMinAmount(token.mint, token.amount, false);
+                if (token.cost && token.cost > 0) {
+                    const { amountOut } = await Raydium.getMinAmount(token.mint, token.amount, false);
                     const diff = calculatePercentageDifference(token.cost, amountOut);
 
                     console.log(`mint: ${token.mint}, diff: ${diff}`);
 
-                    if (diff > 10)
+                    if (diff > 10) {
                         await this.sell(token.mint, token.amount);
+                    }
                 }
             } catch (error) {
                 console.log(error);
             }
         }
-        console.log(new Date());
-        await delay(10000);
-        await this.#try2Sell();
     }
 
-    #getMyTokens = async () => {
+    async #getMyTokens() {
         const accounts = await getParsedTokenAccountsByOwner();
 
         return accounts.value
@@ -134,7 +113,7 @@ class Wallet {
             });
     }
 
-    #swap = async (mint, amount, isBuy, slippage) => {
+    async #swap(mint, amount, isBuy, slippage) {
         console.log("try to swap for ", mint, amount, isBuy);
         try {
             // raydium.io -> web3.js -> simulateMultipleInstruction

@@ -16,7 +16,11 @@ export const getParsedTransaction = async signature =>
             }
         );
 
-export const getTransactions = async mint => {
+export const getSignaturesForAddress = () => {
+    
+}
+
+export const getTransactions = async () => {
     const signatures = (
         await connection.getSignaturesForAddress(
             payer.publicKey, {
@@ -33,7 +37,6 @@ export const getTransactions = async mint => {
 
         return transactions
             .filter(transaction => !transaction.meta.status.Err)
-            .filter(transaction => JSON.stringify(transaction).includes(mint))
             .filter(transaction => !JSON.stringify(transaction).includes("burn68h9dS2tvZwtCFMt79SyaEgvqtcZZWJphizQxgt"));
     }
 
