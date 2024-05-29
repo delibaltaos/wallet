@@ -55,14 +55,6 @@ class Token {
     get decimals() {
         return this.#decimals;
     }
-
-    get mint() {
-        return this.#mint;
-    }
-
-    get tokenObj() {
-        //
-    }
 }
 
 export default Token;

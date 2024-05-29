@@ -1,70 +1,62 @@
 import {TOKEN_PROGRAM_ID} from '@solana/spl-token';
-import {connection, MyPublicKey} from './config.js';
+import {connection, payer} from './config.js';
 
-export const listenMyLogs = (callback, commitment) => {
-    connection.onLogs(MyPublicKey, callback, commitment);
-}
-
-export const listenLogs = (publicKey, callback) => {
+export const listenLogs = (publicKey, callback) =>
     connection.onLogs(publicKey, callback);
-}
 
-export const getParsedTransaction = async signature => await connection.getParsedTransaction(
-    signature, {
-        commitment: 'confirmed',
-        maxSupportedTransactionVersion: 0
+export const listenMyLogs = callback =>
+    connection.onLogs(payer.publicKey, callback);
+
+export const getParsedTransaction = async signature =>
+    await connection
+        .getParsedTransaction(
+            signature, {
+                commitment: 'confirmed',
+                maxSupportedTransactionVersion: 0
+            }
+        );
+
+export const getTransactions = async mint => {
+    const signatures = (
+        await connection.getSignaturesForAddress(
+            payer.publicKey, {
+                limit: 100
+            }
+        )
+    ).map(signature => signature.signature);
+
+    if (signatures.length > 0) {
+        const transactions = await connection.getParsedTransactions(signatures, {
+            commitment: 'confirmed',
+            maxSupportedTransactionVersion: 0
+        });
+
+        return transactions
+            .filter(transaction => !transaction.meta.status.Err)
+            .filter(transaction => JSON.stringify(transaction).includes(mint))
+            .filter(transaction => !JSON.stringify(transaction).includes("burn68h9dS2tvZwtCFMt79SyaEgvqtcZZWJphizQxgt"));
     }
-);
 
-export const getTokenAccountsByOwner = async () => {
-    //
+    return [];
 }
 
-export const sendTransactions = async () => {
-    //
-}
-
-export const getAccountInfo = async id => await connection.getAccountInfo(id);
 
 export const getParsedTokenAccountsByOwner = async () =>
-    await connection.getParsedTokenAccountsByOwner(MyPublicKey, {
+    await connection.getParsedTokenAccountsByOwner(payer.publicKey, {
         programId: TOKEN_PROGRAM_ID
     });
 
-export const getOwnerTokenAccounts = async () => {
-    let walletTokenAccount;
+export const sendTransaction = async transaction => {
+    transaction.sign(payer);
 
-    // Fetch token accounts by owner
-    try {
-        walletTokenAccount = await connection.getTokenAccountsByOwner(
-            MyPublicKey,
-            {programId: TOKEN_PROGRAM_ID}
-        );
-    } catch (error) {
-        console.log('Error fetching token accounts by owner:', error);
-        throw new Error('Failed to fetch token accounts by owner');
-    }
-
-    // Ensure the response contains values
-    if (!walletTokenAccount || !walletTokenAccount.value) {
-        throw new Error('Invalid response: no token accounts found');
-    }
-
-    // Decode account info
-    let tokenAccounts;
-    try {
-        tokenAccounts = walletTokenAccount.value.map(i => {
-            const accountInfo = SPL_ACCOUNT_LAYOUT.decode(i.account.data);
-            return {
-                pubkey: i.pubkey,
-                programId: i.account.owner,
-                accountInfo
-            };
-        });
-    } catch (error) {
-        console.log('Error decoding token account data:', error);
-        throw new Error('Failed to decode token account data');
-    }
-
-    return tokenAccounts;
+    return await connection.sendTransaction(transaction, [payer], {
+        skipPreflight: true,
+        maxRetries: 10,
+    });
 }
+
+export const sendAndConfirmTransaction = async transaction =>
+    await connection.confirmTransaction(
+        await sendTransaction(transaction),
+        'confirmed'
+    );

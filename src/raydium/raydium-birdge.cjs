@@ -11,7 +11,8 @@ const {
     SPL_MINT_LAYOUT,
     buildSimpleTransaction,
     LOOKUP_TABLE_CACHE,
-    TxVersion
+    TxVersion,
+    MAINNET_PROGRAM_ID
 } = require("@raydium-io/raydium-sdk");
 
 module.exports = {
@@ -27,5 +28,6 @@ module.exports = {
     SPL_MINT_LAYOUT,
     buildSimpleTransaction,
     LOOKUP_TABLE_CACHE,
-    TxVersion
+    TxVersion,
+    MAINNET_PROGRAM_ID
 };
