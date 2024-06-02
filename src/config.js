@@ -12,7 +12,6 @@ import {
 import bip39 from 'bip39';
 
 export const connection = new Connection(process.env.RPC_URL, 'confirmed');
-export const TXVersion = process.env.TX_VERSION === "VERSIONED" ? 0 : 1;
 export const payer = getPayer();
 
 function getPayer() {

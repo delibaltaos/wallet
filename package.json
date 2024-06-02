@@ -5,9 +5,7 @@
   "main": "./wallet.js",
   "type": "module",
   "scripts": {
-    "prestart": "node scripts/setup",
     "start": "node main.js",
-    "poststart": "pm2 start scripts/setup",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -26,18 +24,11 @@
   },
   "homepage": "https://github.com/delibaltaos/crypto-wallet#readme",
   "dependencies": {
-    "@raydium-io/raydium-sdk": "^1.3.1-beta.52",
     "@solana/spl-token": "^0.4.6",
     "@solana/web3.js": "^1.91.8",
     "bip39": "^3.1.0",
     "dotenv": "^16.4.5",
     "ed25519-hd-key": "^1.3.0",
-    "execa": "^9.1.0",
-    "listr": "^0.14.3",
-    "pouchdb": "^8.0.1",
-    "pouchdb-find": "^8.0.1",
-    "websocket": "^1.0.35",
-    "winston": "^3.13.0",
     "ws": "^8.17.0"
   }
 }

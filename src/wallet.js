@@ -1,127 +1,200 @@
 import Token from './token.js';
+import * as connectionJs from './connection.js';
+import {getActivity} from './transactionParser.js';
+import {payer} from "./config.js";
+import RPC from "./rpc.js";
+import {getSignatures} from "./connection.js";
 
-import { delay, calculatePercentageDifference } from './utils.js';
-
-import Raydium from "./raydium.js";
-import {
-    getParsedTokenAccountsByOwner,
-    listenMyLogs,
-    getParsedTransaction, getTransactions
-} from './connection.js';
-import { getActivity } from './transactionParser.js';
-
+/**
+ * Represents a wallet that allows buying and selling of tokens.
+ */
 class Wallet {
     #callback;
     #tokens = [];
+    #rpc;
 
     constructor() {
-        // this.#rpc.listenNewTokens(data => {
-        //     const { token, poolKeys, amounts } = JSON.parse(data);
-        // });
-
-        // this.init();
-
-        this.#sell('6NSk1QGw4jwu6mXL184ha3rTBUffmxJMFSCgySLUiUhg', 100).then(txid => {
-            console.log(`txid: ${txid}`);
-        }).catch(error => {
-            console.log(error);
-        })
+        this.#rpc = new RPC();
     }
 
-    async init() {
-        const ts = new Date().getTime();
-        await this.#synchronize();
-        await delay(10000);
-        await this.#try2Sell();
-        const elapsedTime = (new Date().getTime()) - ts;
-        console.log("paralell task finished about: ", elapsedTime, new Date().getTime());
-        await delay(5000);
-        this.init();
-    }
-
-    async #synchronize() {
-        console.log("synchronize called", new Date().getTime());
-        const tokens = await this.#getMyTokens();
-        const transactions = await getTransactions();
-
-        tokens.forEach(token => {
-            transactions.forEach(transaction => {
-                if (JSON.stringify(transaction).includes(token.mint)) {
-                    const activity = getActivity(transaction);
-                    if (activity?.mint && activity?.cost) {
-                        const foundToken = tokens.find(t => t.mint === activity.mint);
-                        if (foundToken) {
-                            foundToken.cost = activity.cost;
-                        }
-                    }
-                }
-            });
+    /**
+     * Starts the synchronization process and sets up intervals for synchronization and selling attempts.
+     *
+     * @returns {Promise<void>} A Promise that resolves when the start process is complete.
+     */
+    start() {
+        this.#synchronize().then(() => {
+            setInterval(() => this.#synchronize(), 10000);
         });
-
-        this.#tokens = tokens;
     }
 
-    listenMyTokens = callback => this.#callback = callback;
+    /**
+     * Sets the callback function to be executed when my tokens are received.
+     *
+     * @param {function} callback - The callback function to be executed.
+     *
+     * @return {void}
+     */
+    listenMyTokens(callback) {
+        this.#callback = callback;
+    }
 
-    #buy = async (mint, amount, slippage) => await Raydium.swap(mint, amount, true, slippage);
+    /**
+     * Listens for new tokens and invokes the provided callback.
+     *
+     * @param {function} callback - The callback function to be invoked when new tokens are received.
+     * @returns {void}
+     */
+    listenNewTokens(callback) {
+        this.#rpc.listenNewTokens(callback);
+    }
 
-    #sell = async (mint, amount, slippage) => await Raydium.swap(mint, amount, false, slippage);
+    /**
+     * Asynchronously executes a buy transaction.
+     *
+     * @param {string} mint - The mint address.
+     * @param {number} amount - The amount to buy.
+     * @param {number} slippage - The slippage tolerance (in percentage).
+     * @returns {Promise} - A promise that resolves to the transaction result.
+     */
+    async buy(mint, amount, slippage) {
+        return this.#swap(mint, amount, true, slippage);
+    }
 
-    async #try2Sell() {
-        console.log("try2Sell called ", new Date().getTime());
-        for (const token of this.#tokens) {
-            try {
-                const rpAmount = parseInt((token.amount / 100).toFixed(0));
-                const {
-                    priceImpact,
-                    amountOut
-                } = await Raydium.getMinAmount(token.mint, rpAmount, false, 50);
+    /**
+     * Sell tokens on the given mint with specified amount and slippage.
+     *
+     * @param {string} mint - The mint of the token to sell.
+     * @param {number} amount - The amount of tokens to sell.
+     * @param {number} slippage - The slippage tolerance in percentage.
+     *
+     * @return {Promise} A promise that resolves to the result of the sell transaction.
+     */
+    async sell(mint, amount, slippage=10) {
+        return this.#swap(mint, amount, false, slippage);
+    }
 
-                console.log(`getMinAmount : ${token.mint}, amountOut: ${amountOut}, priceImpact : ${priceImpact}`);
+    /**
+     * Asynchronously synchronizes tokens and transactions.
+     * It updates the cost of tokens based on the corresponding transaction activity.
+     * If a callback function is provided, it calls the callback function with the updated tokens.
+     *
+     * @return {Promise<void>} - A promise that resolves once the synchronization is completed.
+     *                          It does not return a value.
+     * @throws {Error} - If an error occurs during the synchronization process.
+     */
+    async #synchronize() {
+        try {
+            const signatures = await connectionJs.getSignatures();
+            if (signatures.length > 0) {
+                const transactions = await connectionJs.getTransactions(signatures);
+                const tokens = await this.#getMyTokens();
 
-                if (priceImpact > 90 && amountOut >= 0.0001) {
-                    await this.sell(token.mint, rpAmount, 50);
+                tokens.forEach(token => {
+                    transactions.forEach(transaction => {
+                        if (JSON.stringify(transaction).includes(token.mint)) {
+                            const activity = getActivity(transaction);
+                            if (activity?.mint && activity?.cost) {
+                                const foundToken = tokens.find(t => t.mint === activity.mint);
+                                if (foundToken) {
+                                    foundToken.cost = activity.cost;
+                                }
+                            }
+                        }
+                    });
+                });
+
+                this.#tokens = tokens;
+
+                if (this.#callback) {
+                    this.#callback(this.#tokens);
                 }
-
-                if (token.cost && token.cost > 0) {
-                    const { amountOut } = await Raydium.getMinAmount(token.mint, token.amount, false);
-                    const diff = calculatePercentageDifference(token.cost, amountOut);
-
-                    console.log(`mint: ${token.mint}, diff: ${diff}`);
-
-                    if (diff > 10) {
-                        await this.sell(token.mint, token.amount);
-                    }
-                }
-            } catch (error) {
-                console.log(error);
             }
+        } catch (error) {
+            console.debug('Error during synchronization:', error);
         }
     }
 
+    /**
+     * Retrieves the user's tokens.
+     * @async
+     * @returns {Promise<Array<Token>>} An array of Token objects representing the user's tokens.
+     * If there is an error, an empty array is returned.
+     */
     async #getMyTokens() {
-        const accounts = await getParsedTokenAccountsByOwner();
+        try {
+            const accounts = await connectionJs.getParsedTokenAccountsByOwner();
+            const values = accounts.value;
+            const tokens = [];
 
-        return accounts.value
-            .filter(account =>
-                account.account.data.parsed.info.state !== "frozen" &&
-                account.account.data.parsed.info.tokenAmount.uiAmount >= 1
-            )
-            .map(account => {
+            for (const account of values) {
                 const info = account.account.data.parsed.info;
                 const mint = info.mint;
-                const amount = parseFloat(info.tokenAmount.uiAmount);
-                const publicKey = account.pubkey;
-                const decimals = info.tokenAmount.decimals;
+                const coin = await this.#getCoin(mint);
+                const amount = info["tokenAmount"]?.uiAmount || 0;
+                tokens.push(new Token(coin, amount));
+            }
 
-                const token = new Token(mint, publicKey, decimals);
-                token.amount = amount;
+            return tokens;
+        } catch (error) {
+            console.error('Error getting tokens:', error);
+            return [];
+        }
+    }
 
-                return token;
-            });
+    /**
+     * Swap tokens asynchronously.
+     *
+     * @param {string} mint - The address of the token to swap.
+     * @param {number} amount - The amount of tokens to swap.
+     * @param {boolean} isBuy - Indicates whether it is a buy or sell transaction.
+     * @param {number} slippage - The slippage value for the swap transaction.
+     * @returns {Promise} - A promise that resolves with the result of the swap transaction.
+     * @throws {Error} - If an error occurs during the swap transaction.
+     */
+    async #swap(mint, amount, isBuy, slippage) {
+        try {
+            const transaction = await this.#rpc.getTransaction(mint, amount, isBuy, payer.publicKey, slippage);
+            return await connectionJs.sendTransaction(transaction);
+        } catch (error) {
+            console.debug(`Error during swap ${isBuy ? 'buy' : 'sell'}:`, error);
+        }
+    }
+
+
+    /**
+     * Retrieves coin data from the specified mint.
+     * @param {string} mint - The mint address of the coin.
+     * @return {Promise<object|null>} - A promise that resolves to the coin data, or null if an error occurs.
+     */
+    async #getCoin(mint) {
+        try {
+            return await this.#rpc.getCoinData(mint);
+        } catch (error) {
+            console.debug('Error getting coin data:', error);
+            return null;
+        }
+    }
+
+
+    /**
+     * Gets the minimum amount out based on the provided parameters.
+     *
+     * @param {string} mint - The mint address.
+     * @param {number} amount - The amount of tokens.
+     * @param {boolean} isBuy - Indicates whether it is a buy transaction.
+     * @param {number} slippage - The allowed slippage in percentage (default is 10).
+     * @returns {Promise<{ priceImpact: number, amountOut: number }>} An object containing the price impact and the amount out.
+     */
+    async getMinAmountOut(mint, amount, isBuy, slippage = 10) {
+        try {
+            return await this.#rpc.getAmount(mint, amount, isBuy, slippage);
+        } catch (error) {
+            console.debug('Error getting minimum amount out:', error);
+            return {priceImpact: 0, amountOut: 0};
+        }
     }
 }
 
 const WalletInstance = new Wallet();
-
 export default WalletInstance;

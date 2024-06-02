@@ -1,35 +1,62 @@
 class Token {
     #mint;
-    #publicKey;
-    #amount;
     #decimals;
     #name;
     #symbol;
 
+    #isMutable;
+    #isMintable;
+    #hasFreeze;
+    #image;
+    #description;
+    #twitter;
+    #telegram;
+    #website;
+
+    #amount;
     #cost = .0;
-
-    #lastUpdate;
     #buyDate;
-    #soldDate;
-    #profit = .0;
 
-    constructor(mint, publicKey, decimals) {
+    constructor(object, amount) {
+        const {
+            mint,
+            decimals,
+            name,
+            symbol,
+            isMutable,
+            isMintable,
+            hasFreeze,
+            image,
+            description,
+            twitter,
+            website
+        } = object;
+
         this.#mint = mint;
-        this.#publicKey = publicKey;
         this.#decimals = decimals;
-        this.#lastUpdate = new Date().getTime();
+        this.#name = name;
+        this.#symbol = symbol;
+        this.#isMutable = isMutable;
+        this.#isMintable = isMintable;
+        this.#hasFreeze = hasFreeze;
+        this.#image = image;
+        this.#description = description;
+        this.#twitter = twitter;
+        this.#website = website;
+
+        this.#amount = amount;
+    }
+
+    get mint() {
+        return this.#mint;
     }
 
     set amount(amount) {
         this.#amount = amount;
     }
 
-    set name(name) {
-        this.#name = name;
-    }
-
-    set symbol(symbol) {
-        this.#symbol = symbol;
+    get amount() {
+        return this.#amount;
     }
 
     set cost(cost) {
@@ -40,20 +67,40 @@ class Token {
         return this.#cost;
     }
 
-    get mint() {
-        return this.#mint;
-    }
-
-    get publicKey() {
-        return this.#publicKey;
-    }
-
-    get amount() {
-        return this.#amount;
-    }
-
     get decimals() {
         return this.#decimals;
+    }
+
+    get isMutable() {
+        return this.#isMutable;
+    }
+
+    get isMintable() {
+        return this.#isMintable;
+    }
+
+    get hasFreeze() {
+        return this.#hasFreeze;
+    }
+
+    get image() {
+        return this.#image;
+    }
+
+    get description() {
+        return this.#description;
+    }
+
+    get twitter() {
+        return this.#twitter;
+    }
+
+    get telegram() {
+        return this.#telegram;
+    }
+
+    get website() {
+        return this.#website;
     }
 }
 
