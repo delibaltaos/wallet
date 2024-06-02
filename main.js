@@ -55,28 +55,22 @@ class Main {
     }
 
     async #sellUsingPriceImpact(token) {
-        return new Promise(async (resolve, reject) => {
-            const rpAmount = parseInt((token.amount / 100).toFixed(0));
-            const {priceImpact, amountOut} = await Wallet.getMinAmountOut(token.mint, rpAmount, false, 50);
+        const rpAmount = parseInt((token.amount / 100).toFixed(0));
+        const {priceImpact, amountOut} = await Wallet.getAmount(token.mint, rpAmount, false, 50);
 
+        if (isNaN(amountOut) && priceImpact > 90 && amountOut >= 0.0001) {
             console.log(`sellUsingPriceImpact mint : ${token.mint}, amountOut: ${amountOut}, priceImpact : ${priceImpact}`);
-
-            if (isNaN(amountOut) && priceImpact > 90 && amountOut >= 0.0001) {
-                await Wallet.sell(token.mint, rpAmount, 50);
-            }
-
-            resolve();
-        })
+            await Wallet.sell(token.mint, rpAmount, 50);
+        }
     }
 
     async #sellUsingTokenCost(token) {
         if (token.cost && token.cost > 0) {
-            const {amountOut} = await Wallet.getMinAmountOut(token.mint, token.amount, false);
-            console.log(`mint : ${token.mint}, cost: ${token.cost}, amountOut: ${amountOut}`);
+            const {amountOut} = await Wallet.getAmount(token.mint, token.amount, false);
 
             if (!isNaN(amountOut)) {
                 const diff = this.#calculatePercentageDifference(token.cost, amountOut);
-                console.log(`sellUsingTokenCost mint: ${token.mint}, diff: ${diff}`);
+                console.log(`sellUsingTokenCost mint: ${token.mint}, minAmountOut: ${amountOut}, diff: ${diff}`);
                 if (diff > 10) {
                     await Wallet.sell(token.mint, token.amount);
                 }

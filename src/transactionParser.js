@@ -16,8 +16,8 @@ export const getActivity = transaction => {
                 .filter(instruction => instruction.parsed?.type === "transfer")
                 .map(instruction => instruction.parsed.info);
 
-            const solInfo = transferInfos.find(info => info.authority === payer.publicKey.toString());
-            const coinInfo = transferInfos.find(info => info.authority !== payer.publicKey.toString());
+            const solInfo = transferInfos.find(info => info["authority"] === payer.publicKey.toString());
+            const coinInfo = transferInfos.find(info => info["authority"] !== payer.publicKey.toString());
 
             try {
                 const cost = parseFloat(solInfo["amount"]) / 1000000000;
@@ -39,10 +39,6 @@ export const getActivity = transaction => {
     }
 }
 
-export const parseLogs = async signature => {
-    //
-}
-
 /**
  * Finds a log entry in the given log entries.
  * @private
@@ -50,4 +46,4 @@ export const parseLogs = async signature => {
  * @param logEntries
  * @returns {string|null} - The found log entry or null if not found.
  */
-const findLogEntry = (needle, logEntries) => logEntries.find(entry => entry.includes(needle)) || null;
+// const findLogEntry = (needle, logEntries) => logEntries.find(entry => entry.includes(needle)) || null;

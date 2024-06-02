@@ -3,7 +3,6 @@ import * as connectionJs from './connection.js';
 import {getActivity} from './transactionParser.js';
 import {payer} from "./config.js";
 import RPC from "./rpc.js";
-import {getSignatures} from "./connection.js";
 
 /**
  * Represents a wallet that allows buying and selling of tokens.
@@ -124,7 +123,9 @@ class Wallet {
     async #getMyTokens() {
         try {
             const accounts = await connectionJs.getParsedTokenAccountsByOwner();
-            const values = accounts.value;
+            const values = accounts.value.filter(account =>
+                account.account.data.parsed.info["tokenAmount"].uiAmount >= 0
+            );
             const tokens = [];
 
             for (const account of values) {
@@ -186,7 +187,7 @@ class Wallet {
      * @param {number} slippage - The allowed slippage in percentage (default is 10).
      * @returns {Promise<{ priceImpact: number, amountOut: number }>} An object containing the price impact and the amount out.
      */
-    async getMinAmountOut(mint, amount, isBuy, slippage = 10) {
+    async getAmount(mint, amount, isBuy, slippage = 10) {
         try {
             return await this.#rpc.getAmount(mint, amount, isBuy, slippage);
         } catch (error) {
