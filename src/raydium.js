@@ -9,9 +9,8 @@ import {
     SPL_MINT_LAYOUT,
     Token,
     TokenAmount,
-    MAINNET_PROGRAM_ID,
     SPL_ACCOUNT_LAYOUT
-} from "./raydium-birdge.cjs";
+} from "./raydium/raydium-birdge.cjs";
 
 import BN from "bn.js";
 
@@ -28,18 +27,18 @@ import {
     connection,
     payer,
     TXVersion
-} from "../config.js";
+} from "./config.js";
 
 import {
     listenLogs,
     sendAndConfirmTransaction
-} from "../connection.js";
+} from "./connection.js";
 
-import DB from "../db.js";
+import DB from "./db.js";
 
-import {getNewMint} from "./mint.js";
+// import {getNewMint} from "./mint.js";
 import {TOKEN_PROGRAM_ID} from "@solana/spl-token";
-import {delay} from "../utils.js";
+import {delay} from "./utils.js";
 
 class Raydium {
     #poolKeys = {};
@@ -55,14 +54,6 @@ class Raydium {
         });
     }
 
-    listenNewTokens = callback => {
-        if (callback === undefined) return;
-        this.#newTokenCallback = callback;
-        console.log("Listening to new tokens...");
-
-        listenLogs(MAINNET_PROGRAM_ID.AmmV4, this.#parseTxLogs);
-    }
-
     async swap(mint, amount, isBuy, slippage) {
         const transaction = await this.#getTransaction(
             mint,
@@ -76,17 +67,6 @@ class Raydium {
         } else {
             console.log(`Transaction is undefined mint: ${mint}, amount: ${amount.toFixed()}, isBuy: ${isBuy}`);
         }
-    }
-
-    async getTestMint(callback) {
-        const signature = "4VdUw8zE4Lr4Ha9W2cMLJhzEYaKKd3E3YAKZnRPYgh35mQePKhq3fM1xRKVifGpLAihEbLwH9CHJHA9wdyomaknh";
-        this.#poolKeys = await this.#getPoolKeysFromTX(signature);
-
-        // this.#poolsInfos.set(poolKeys.id, poolKeys);
-
-        // console.log(`New pool found: ${poolKeys.baseMint.toBase58()}, ${poolKeys.quoteMint.toBase58()}`);
-
-        callback(this.#poolKeys.baseMint.toBase58());
     }
 
     getMinAmount = async (baseMint, amount, isBuy, slippage) => {
@@ -156,69 +136,6 @@ class Raydium {
         });
 
         return transactions?.[0];
-    }
-
-    #parseTxLogs = async txLogs => {
-        const {logs, signature} = txLogs;
-
-        if (this.#findLogEntry("error", logs)) return;
-
-        if (
-            this.#findLogEntry("init_pc_amount", logs) ||
-            this.#findLogEntry("initialize2", logs)
-        ) {
-            console.log(`New LP init transaction found: ${signature}`);
-
-            try {
-                const pool = await this.#getPoolKeysFromTX(txLogs.signature);
-                const baseMint = pool.baseMint;
-                const quoteMint = pool.quoteMint;
-
-                // const result = await getNewMint(baseMint.toBase58());
-
-                console.log(`New pool found: ${baseMint.toBase58()}, ${quoteMint.toBase58()}`);
-
-                const poolKeys = JSON.parse(JSON.stringify(pool));
-                await DB.putPool(poolKeys);
-
-                await delay(10000);
-                if (baseMint.toBase58() === "So11111111111111111111111111111111111111112") {
-                    this.#newTokenCallback(quoteMint.toBase58());
-                } else {
-                    this.#newTokenCallback(baseMint.toBase58());
-                }
-            } catch (error) {
-                console.log(`error : ${error}, signature: ${signature}`);
-            }
-        }
-    }
-
-    #getPoolKeysFromTX = async tx => {
-        const parsedTransaction = await connection.getParsedTransaction(
-            tx, {
-                maxSupportedTransactionVersion: 0
-            }
-        );
-
-        const id = this.#getIdFromParsedTransaction(parsedTransaction);
-
-        return await this.#getPoolKeysFromId(id);
-    }
-
-    #getIdFromParsedTransaction = parsedTransaction => {
-        const initInstruction = parsedTransaction?.transaction?.message?.instructions?.find(
-            instruction => instruction.programId.equals(MAINNET_PROGRAM_ID.AmmV4)
-        );
-
-        if (!initInstruction)
-            throw new Error("Failed to find lp init instruction in lp init tx");
-
-        const id = initInstruction.accounts?.[4];
-
-        if (!id)
-            throw new Error("Failed to find id in lp init instruction");
-
-        return id;
     }
 
     #getPool = async mint => {
@@ -507,8 +424,6 @@ class Raydium {
 
         return tokenAccounts;
     }
-
-    #findLogEntry = (needle, logEntries) => logEntries.find(entry => entry.includes(needle)) || null;
 }
 
 const RaydiumInstance = new Raydium();
