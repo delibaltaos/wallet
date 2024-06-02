@@ -37,19 +37,18 @@ class Main {
             if (!this.#isTryingToSell) {
                 await this.#try2Sell();
             }
-        }, 1000);
+        }, 30000);
     }
 
     async #try2Sell() {
         this.#isTryingToSell = true;
-        const promises = this.#tokens.flatMap(token => {
-            return [
-                this.#sellUsingPriceImpact(token),
-                this.#sellUsingTokenCost(token)
-            ]
-        });
 
-        await Promise.all(promises);
+        for(const token of this.#tokens) {
+            const result = await this.#sellUsingPriceImpact(token);
+            if (!result) {
+                await this.#sellUsingTokenCost(token);
+            }
+        }
 
         this.#isTryingToSell = false;
     }
@@ -59,9 +58,13 @@ class Main {
         const {priceImpact, amountOut} = await Wallet.getAmount(token.mint, rpAmount, false, 50);
 
         if (isNaN(amountOut) && priceImpact > 90 && amountOut >= 0.0001) {
-            console.log(`sellUsingPriceImpact mint : ${token.mint}, amountOut: ${amountOut}, priceImpact : ${priceImpact}`);
-            await Wallet.sell(token.mint, rpAmount, 50);
+            console.log(`sellUsingPriceImpact mint : ${token.mint}, amountIn: ${rpAmount}, amountOut: ${amountOut}, priceImpact : ${priceImpact}`);
+            const signature = await Wallet.sell(token.mint, rpAmount, 50);
+            console.log("signature: ", signature);
+            return true;
         }
+
+        return false;
     }
 
     async #sellUsingTokenCost(token) {
@@ -70,9 +73,10 @@ class Main {
 
             if (!isNaN(amountOut)) {
                 const diff = this.#calculatePercentageDifference(token.cost, amountOut);
-                console.log(`sellUsingTokenCost mint: ${token.mint}, minAmountOut: ${amountOut}, diff: ${diff}`);
+                console.log(`sellUsingTokenCost mint: ${token.mint}, amountIn: ${token.amount}, minAmountOut: ${amountOut}, diff: ${diff}`);
                 if (diff > 10) {
-                    await Wallet.sell(token.mint, token.amount);
+                    const signature = await Wallet.sell(token.mint, token.amount);
+                    console.log("signature: ", signature);
                 }
             }
         }

@@ -73,13 +73,11 @@ export const getSignatures = async () => {
         options.until = lastSignature;
     }
 
-    const signatures = (
+    return (
         await connection.getSignaturesForAddress(payer.publicKey, options)
     )
         .map(signatureInfo => signatureInfo.signature)
         .filter(signature => !processedSignatures.has(signature));
-
-    return signatures
 }
 
 /**
@@ -104,12 +102,13 @@ export const getParsedTokenAccountsByOwner = async () => {
 /**
  * Sends a transaction to the specified connection.
  *
- * @param {Transaction} transaction - The transaction to be sent.
+ * @param {string} rawTransaction - The raw transaction data.
  * @return {Promise<Object>} - A promise that resolves to the result of the transaction or rejects with an error.
  * @throws {Error} - If there was an error sending the transaction.
  */
-export const sendTransaction = async (transaction) => {
+export const sendTransaction = async (rawTransaction) => {
     try {
+        const transaction = deserializeTransaction(rawTransaction);
         transaction.sign(payer);
         return await connection.sendTransaction(transaction, [payer], {
             skipPreflight: true,
@@ -130,8 +129,7 @@ export const sendTransaction = async (transaction) => {
  */
 export const sendAndConfirmTransaction = async (rawTransaction) => {
     try {
-        const transaction = deserializeTransaction(rawTransaction);
-        const signature = await sendTransaction(transaction);
+        const signature = await sendTransaction(rawTransaction);
         return await connection.confirmTransaction(signature, 'confirmed');
     } catch (error) {
         console.error('Error sending and confirming transaction:', error);

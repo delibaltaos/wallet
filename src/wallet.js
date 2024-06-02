@@ -124,7 +124,7 @@ class Wallet {
         try {
             const accounts = await connectionJs.getParsedTokenAccountsByOwner();
             const values = accounts.value.filter(account =>
-                account.account.data.parsed.info["tokenAmount"].uiAmount >= 0
+                account.account.data.parsed.info["tokenAmount"].uiAmount > 0
             );
             const tokens = [];
 
@@ -155,8 +155,8 @@ class Wallet {
      */
     async #swap(mint, amount, isBuy, slippage) {
         try {
-            const transaction = await this.#rpc.getTransaction(mint, amount, isBuy, payer.publicKey, slippage);
-            return await connectionJs.sendTransaction(transaction);
+            const rawTransaction = await this.#rpc.getTransaction(mint, amount, isBuy, payer.publicKey, slippage);
+            return await connectionJs.sendAndConfirmTransaction(rawTransaction);
         } catch (error) {
             console.debug(`Error during swap ${isBuy ? 'buy' : 'sell'}:`, error);
         }
