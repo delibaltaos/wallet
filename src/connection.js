@@ -16,9 +16,7 @@ export const getParsedTransaction = async signature =>
             }
         );
 
-export const getSignaturesForAddress = () => {
-    
-}
+export const getSignaturesForAddress = () => {}
 
 export const getTransactions = async () => {
     const signatures = (
@@ -42,7 +40,6 @@ export const getTransactions = async () => {
 
     return [];
 }
-
 
 export const getParsedTokenAccountsByOwner = async () =>
     await connection.getParsedTokenAccountsByOwner(payer.publicKey, {

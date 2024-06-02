@@ -12,7 +12,10 @@ const {
     buildSimpleTransaction,
     LOOKUP_TABLE_CACHE,
     TxVersion,
-    MAINNET_PROGRAM_ID
+    MAINNET_PROGRAM_ID,
+    jsonInfo2PoolKeys,
+    CurrencyAmount,
+    Fraction
 } = require("@raydium-io/raydium-sdk");
 
 module.exports = {
@@ -29,5 +32,8 @@ module.exports = {
     buildSimpleTransaction,
     LOOKUP_TABLE_CACHE,
     TxVersion,
-    MAINNET_PROGRAM_ID
+    MAINNET_PROGRAM_ID,
+    jsonInfo2PoolKeys,
+    CurrencyAmount,
+    Fraction
 };

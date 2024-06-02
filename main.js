@@ -1,5 +1,4 @@
 import Wallet from './src/wallet.js';
-
 // Wallet.getMyTokens().then(tokens => {
 //     console.log(tokens);
 // }).catch(error => {

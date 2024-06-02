@@ -2,7 +2,7 @@ import Token from './token.js';
 
 import { delay, calculatePercentageDifference } from './utils.js';
 
-import Raydium from "./raydium/raydium.js";
+import Raydium from "./raydium.js";
 import {
     getParsedTokenAccountsByOwner,
     listenMyLogs,
@@ -15,7 +15,17 @@ class Wallet {
     #tokens = [];
 
     constructor() {
-        this.init();
+        // this.#rpc.listenNewTokens(data => {
+        //     const { token, poolKeys, amounts } = JSON.parse(data);
+        // });
+
+        // this.init();
+
+        this.#sell('6NSk1QGw4jwu6mXL184ha3rTBUffmxJMFSCgySLUiUhg', 100).then(txid => {
+            console.log(`txid: ${txid}`);
+        }).catch(error => {
+            console.log(error);
+        })
     }
 
     async init() {
@@ -51,13 +61,11 @@ class Wallet {
         this.#tokens = tokens;
     }
 
-    listenNewTokens = callback => Raydium.getTestMint(callback);
-
     listenMyTokens = callback => this.#callback = callback;
 
-    buy = async (mint, amount, slippage) => await this.#swap(mint, amount, true, slippage);
+    #buy = async (mint, amount, slippage) => await Raydium.swap(mint, amount, true, slippage);
 
-    sell = async (mint, amount, slippage) => await this.#swap(mint, amount, false, slippage);
+    #sell = async (mint, amount, slippage) => await Raydium.swap(mint, amount, false, slippage);
 
     async #try2Sell() {
         console.log("try2Sell called ", new Date().getTime());
@@ -111,17 +119,6 @@ class Wallet {
 
                 return token;
             });
-    }
-
-    async #swap(mint, amount, isBuy, slippage) {
-        console.log("try to swap for ", mint, amount, isBuy);
-        try {
-            // raydium.io -> web3.js -> simulateMultipleInstruction
-            await Raydium.swap(mint, amount, isBuy, slippage);
-            console.log("Transaction completed successfully");
-        } catch (error) {
-            console.log("Error: ", error);
-        }
     }
 }
 
