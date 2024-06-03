@@ -56,8 +56,12 @@ class RPC {
     #initWebSocket() {
         this.#ws = new WebSocket(`ws://${HOST}:${PORT}`);
         this.#ws.on('error', console.error);
-        this.#ws.on('open', function open() {
+        this.#ws.on('open', () => {
             console.log("web socket connected");
+        });
+
+        this.#ws.on('close', () => {
+            setTimeout(() => this.#initWebSocket(), 1000);
         });
     }
 
@@ -95,7 +99,6 @@ class RPC {
     getAmount = async (mint, amount, isBuy, slippage = 10) =>
         await this.#fetchData(this._buildUrl("/getAmount", {mint, amount, isBuy, slippage}));
 
-
     /**
      * Fetches transaction data using the specified parameters.
      *
@@ -109,7 +112,6 @@ class RPC {
      */
     getTransaction = async (mint, amount, isBuy, payer, slippage = 10) =>
         await this.#fetchData(this._buildUrl("/getTransaction", {mint, amount, isBuy, payer, slippage}));
-
 
     /**
      * Fetches data from a specified URL using the Fetch API.

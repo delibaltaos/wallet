@@ -1,12 +1,23 @@
 import Wallet from './src/wallet.js';
 
 class Main {
-    #tokens = [];
     #isTryingToSell = false;
     #intervalId;
 
     constructor() {
-        this.#initializeWallet().then(() => {
+        Wallet.start().then(() => {
+            this.#logWallet();
+
+            Wallet.listen(async () => {
+                this.#logWallet();
+            });
+
+            Wallet.listenNewTokens(async token => {
+                if (!token.isMutable && token.isMintable) {
+                    await Wallet.buy(token.mint, 0.001);
+                }
+            });
+
             this.#startSelling()
                 .then(() => {
                     console.log('Selling process started.');
@@ -14,20 +25,7 @@ class Main {
                 .catch(error => {
                     console.error('Error starting the selling process:', error);
                 });
-        });
-    }
-
-    async #initializeWallet() {
-        try {
-            await Wallet.start();
-            console.log("Wallet Started");
-        } catch (error) {
-            console.log("Error When Wallet Starting: ", error);
-        }
-
-        Wallet.listenMyTokens((tokens) => {
-            this.#tokens = tokens;
-        });
+        })
     }
 
     async #startSelling() {
@@ -37,13 +35,13 @@ class Main {
             if (!this.#isTryingToSell) {
                 await this.#try2Sell();
             }
-        }, 30000);
+        }, 1000);
     }
 
     async #try2Sell() {
         this.#isTryingToSell = true;
 
-        for(const token of this.#tokens) {
+        for (const token of Wallet.tokens) {
             const result = await this.#sellUsingPriceImpact(token);
             if (!result) {
                 await this.#sellUsingTokenCost(token);
@@ -71,12 +69,13 @@ class Main {
         if (token.cost && token.cost > 0) {
             const {amountOut} = await Wallet.getAmount(token.mint, token.amount, false);
 
-            if (!isNaN(amountOut)) {
+            if (!isNaN(amountOut) && amountOut > 0) {
                 const diff = this.#calculatePercentageDifference(token.cost, amountOut);
                 console.log(`sellUsingTokenCost mint: ${token.mint}, amountIn: ${token.amount}, minAmountOut: ${amountOut}, diff: ${diff}`);
-                if (diff > 10) {
+                if (diff > 0) {
                     const signature = await Wallet.sell(token.mint, token.amount);
                     console.log("signature: ", signature);
+
                 }
             }
         }
@@ -84,6 +83,13 @@ class Main {
 
     #calculatePercentageDifference(buyPrice, sellPrice) {
         return ((sellPrice - buyPrice) / buyPrice) * 100;
+    }
+
+    #logWallet() {
+        console.log("Balance : ", Wallet.balance);
+        console.log('Vacant Accounts :', Wallet.vacantAccounts);
+        console.log('ToBeBurned Accounts: ', Wallet.toBeBurnedAccounts);
+        console.log('Tokens : ', Wallet.tokens);
     }
 }
 

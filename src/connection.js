@@ -1,12 +1,15 @@
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, closeAccount } from '@solana/spl-token';
 import { connection, payer } from './config.js';
 import {
     Transaction,
     TransactionInstruction,
-    PublicKey
+    PublicKey,
+    LAMPORTS_PER_SOL
 } from '@solana/web3.js';
+
 let lastSignature = null;
 const processedSignatures = new Set();
+
 /**
  * Listens for logs using the provided public key and callback function.
  *
@@ -17,6 +20,15 @@ const processedSignatures = new Set();
 export const listenLogs = (publicKey, callback) =>
     connection.onLogs(publicKey, callback);
 
+export const listenAccountChange = callback =>
+    connection.onAccountChange(payer.publicKey, async (accountInfo) => {
+        callback(accountInfo.lamports / LAMPORTS_PER_SOL);
+    });
+
+export const getBalance = async () => {
+    const balance = await connection.getBalance(payer.publicKey);
+    return balance / LAMPORTS_PER_SOL;
+}
 /**
  * Listen for logs.
  *
@@ -25,7 +37,6 @@ export const listenLogs = (publicKey, callback) =>
  */
 export const listenMyLogs = (callback) =>
     connection.onLogs(payer.publicKey, callback);
-
 
 /**
  * Retrieves and filters transactions based on the provided signatures.
@@ -132,7 +143,7 @@ export const sendAndConfirmTransaction = async (rawTransaction) => {
         const signature = await sendTransaction(rawTransaction);
         return await connection.confirmTransaction(signature, 'confirmed');
     } catch (error) {
-        console.error('Error sending and confirming transaction:', error);
+        console.log('Error sending and confirming transaction:', error);
         throw error;
     }
 };
@@ -144,7 +155,7 @@ export const sendAndConfirmTransaction = async (rawTransaction) => {
  * @returns {Transaction} - The deserialized Transaction object.
  * @throws {Error} - If there is an error deserializing the transaction.
  */
-const deserializeTransaction = (rawTransaction) => {
+export const deserializeTransaction = (rawTransaction) => {
     try {
         const transaction = new Transaction({
             recentBlockhash: rawTransaction.recentBlockhash,
@@ -171,3 +182,63 @@ const deserializeTransaction = (rawTransaction) => {
         throw error;
     }
 };
+
+export const close1 = async mint => {
+    try {
+        const txid = await closeAccount(connection, payer, mint, payer.publicKey, payer.publicKey);
+        console.log(txid);
+    }catch (error) {
+        console.log(error);
+    }
+}
+
+/**
+ * Closes an account by transferring its balance to another account and then closing it.
+ *
+ * @param {PublicKey} mint - The mint address of the token account to close.
+ * @returns {Promise<void>} - A promise that resolves when the account is closed.
+ */
+/*export const closeAccount = async (mint) => {
+    try {
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(payer.publicKey, {
+            mint,
+        });
+
+        if (tokenAccounts.value.length === 0) {
+            console.error('No token accounts found for this mint address.');
+            return;
+        }
+
+        const accountToClose = tokenAccounts.value[0].pubkey;
+        const transaction = new Transaction().add(
+            new TransactionInstruction({
+                keys: [
+                    { pubkey: accountToClose, isSigner: false, isWritable: true },
+                    { pubkey: payer.publicKey, isSigner: false, isWritable: true },
+                    { pubkey: payer.publicKey, isSigner: true, isWritable: false },
+                ],
+                programId: TOKEN_PROGRAM_ID,
+                data: Buffer.from([9]), // 9 is the instruction index for CloseAccount in the SPL Token program
+            })
+        );
+        const blockHash = await connection.getRecentBlockhash('confirmed');
+        transaction.recentBlockhash = blockHash.blockhash;
+        transaction.sign(payer);
+
+        const signature = await connection.sendTransaction(transaction, [payer], {
+            skipPreflight: true,
+            maxRetries: 10,
+        });
+
+        console.log(signature);
+        const result = await connection.confirmTransaction(
+            signature, 'confirmed'
+        );
+        // const signature = await web3SendAndConfirmTransaction(connection, transaction, [payer]);
+
+        console.log('Account closed with signature:', signature);
+    } catch (error) {
+        console.error('Error closing account:', error);
+        throw error;
+    }
+};*/

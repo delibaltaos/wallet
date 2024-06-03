@@ -13,9 +13,8 @@ class Token {
     #telegram;
     #website;
 
-    #amount;
+    #amount = 0;
     #cost = .0;
-    #buyDate;
 
     constructor(object, amount) {
         const {

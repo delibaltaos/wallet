@@ -3,17 +3,35 @@ import * as connectionJs from './connection.js';
 import {getActivity} from './transactionParser.js';
 import {payer} from "./config.js";
 import RPC from "./rpc.js";
+import {PublicKey} from "@solana/web3.js";
 
 /**
  * Represents a wallet that allows buying and selling of tokens.
  */
 class Wallet {
     #callback;
-    #tokens = [];
     #rpc;
+    #balance = 0;
 
+    #tokens = [];
+    #vacantAccounts = [];
+    #toBeBurnedAccounts = [];
     constructor() {
         this.#rpc = new RPC();
+    }
+
+    async #initBalance() {
+        this.#balance = await connectionJs.getBalance();
+
+        connectionJs.listenAccountChange(async newBalance => {
+            if (this.#balance !== newBalance) {
+                this.#balance = newBalance;
+            }
+
+            await this.#synchronize();
+
+            this.#callback?.(newBalance);
+        });
     }
 
     /**
@@ -21,21 +39,29 @@ class Wallet {
      *
      * @returns {Promise<void>} A Promise that resolves when the start process is complete.
      */
-    start() {
-        this.#synchronize().then(() => {
-            setInterval(() => this.#synchronize(), 10000);
-        });
+    async start() {
+        await this.#initBalance();
+        await this.#synchronize();
     }
 
-    /**
-     * Sets the callback function to be executed when my tokens are received.
-     *
-     * @param {function} callback - The callback function to be executed.
-     *
-     * @return {void}
-     */
-    listenMyTokens(callback) {
+    listen(callback) {
         this.#callback = callback;
+    }
+
+    get balance() {
+        return this.#balance;
+    }
+
+    get tokens() {
+        return this.#tokens;
+    }
+
+    get vacantAccounts() {
+        return this.#vacantAccounts;
+    }
+
+    get toBeBurnedAccounts() {
+        return this.#toBeBurnedAccounts;
     }
 
     /**
@@ -45,7 +71,11 @@ class Wallet {
      * @returns {void}
      */
     listenNewTokens(callback) {
-        this.#rpc.listenNewTokens(callback);
+        this.#rpc.listenNewTokens(coin => {
+            coin.mint = new PublicKey(coin.mint);
+            const token = new Token(coin, 0);
+            callback(token);
+        });
     }
 
     /**
@@ -53,12 +83,11 @@ class Wallet {
      *
      * @param {string} mint - The mint address.
      * @param {number} amount - The amount to buy.
-     * @param {number} slippage - The slippage tolerance (in percentage).
+     * @param {number} slippage - The slippage
      * @returns {Promise} - A promise that resolves to the transaction result.
      */
-    async buy(mint, amount, slippage) {
-        return this.#swap(mint, amount, true, slippage);
-    }
+    buy = async (mint, amount, slippage=10) =>
+        this.#swap(mint, amount, true, slippage);
 
     /**
      * Sell tokens on the given mint with specified amount and slippage.
@@ -69,45 +98,79 @@ class Wallet {
      *
      * @return {Promise} A promise that resolves to the result of the sell transaction.
      */
-    async sell(mint, amount, slippage=10) {
-        return this.#swap(mint, amount, false, slippage);
+    async sell(mint, amount, slippage = 10) {
+        const result = this.#swap(mint, amount, false, slippage);
+
+        if (result["value"].err === null) {
+            return true;
+        } else {
+            //
+        }
     }
 
-    /**
-     * Asynchronously synchronizes tokens and transactions.
-     * It updates the cost of tokens based on the corresponding transaction activity.
-     * If a callback function is provided, it calls the callback function with the updated tokens.
-     *
-     * @return {Promise<void>} - A promise that resolves once the synchronization is completed.
-     *                          It does not return a value.
-     * @throws {Error} - If an error occurs during the synchronization process.
-     */
     async #synchronize() {
         try {
             const signatures = await connectionJs.getSignatures();
-            if (signatures.length > 0) {
-                const transactions = await connectionJs.getTransactions(signatures);
-                const tokens = await this.#getMyTokens();
 
-                tokens.forEach(token => {
-                    transactions.forEach(transaction => {
-                        if (JSON.stringify(transaction).includes(token.mint)) {
-                            const activity = getActivity(transaction);
-                            if (activity?.mint && activity?.cost) {
-                                const foundToken = tokens.find(t => t.mint === activity.mint);
-                                if (foundToken) {
-                                    foundToken.cost = activity.cost;
+            if (signatures.length > 0) {
+                const myTokens = await this.#getMyTokens();
+
+                this.#vacantAccounts = myTokens.filter(token => token.amount === 0);
+
+                const smallAmountTokens = myTokens.filter(token =>
+                    token.amount < 1 && token.amount > 0
+                );
+
+                const toBeBurnedAccounts = [];
+
+                for(const token of smallAmountTokens) {
+                    try {
+                        const { amountOut} = await this.getAmount(
+                            token.mint,
+                            token.amount,
+                            false,
+                            10
+                        );
+
+                        if (amountOut < 0.0001) {
+                            toBeBurnedAccounts.push(token);
+                        }
+                    } catch (error) {
+                        console.log(error);
+                    }
+
+                    this.#toBeBurnedAccounts = toBeBurnedAccounts;
+                }
+
+                const tokens = myTokens.filter(token =>
+                    !toBeBurnedAccounts.includes(token) &&
+                    !this.#vacantAccounts.includes(token)
+                );
+
+                const finalizedTokens = [];
+                for(const token of tokens) {
+                    const coin = await this.#getCoin(token.mint);
+                    finalizedTokens.push(new Token(coin, token.amount));
+                }
+
+                this.#tokens = finalizedTokens;
+                const transactions = await connectionJs.getTransactions(signatures);
+
+                this.#tokens
+                    .forEach(token => {
+                        transactions.forEach(transaction => {
+                            if (JSON.stringify(transaction).includes(token.mint)) {
+                                const activity = getActivity(transaction);
+                                if (activity?.mint && activity?.cost) {
+                                    const foundToken = this.#tokens.find(t => t.mint === activity.mint);
+                                    if (foundToken) {
+                                        console.log(foundToken.mint, activity.cost);
+                                        foundToken.cost = activity.cost;
+                                    }
                                 }
                             }
-                        }
+                        });
                     });
-                });
-
-                this.#tokens = tokens;
-
-                if (this.#callback) {
-                    this.#callback(this.#tokens);
-                }
             }
         } catch (error) {
             console.debug('Error during synchronization:', error);
@@ -123,17 +186,16 @@ class Wallet {
     async #getMyTokens() {
         try {
             const accounts = await connectionJs.getParsedTokenAccountsByOwner();
-            const values = accounts.value.filter(account =>
-                account.account.data.parsed.info["tokenAmount"].uiAmount > 0
-            );
             const tokens = [];
 
-            for (const account of values) {
+            for (const account of accounts.value) {
                 const info = account.account.data.parsed.info;
                 const mint = info.mint;
-                const coin = await this.#getCoin(mint);
                 const amount = info["tokenAmount"]?.uiAmount || 0;
-                tokens.push(new Token(coin, amount));
+                tokens.push({
+                    mint: mint,
+                    amount: amount
+                });
             }
 
             return tokens;
@@ -162,7 +224,6 @@ class Wallet {
         }
     }
 
-
     /**
      * Retrieves coin data from the specified mint.
      * @param {string} mint - The mint address of the coin.
@@ -176,7 +237,6 @@ class Wallet {
             return null;
         }
     }
-
 
     /**
      * Gets the minimum amount out based on the provided parameters.
