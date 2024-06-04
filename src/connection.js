@@ -120,6 +120,8 @@ export const getParsedTokenAccountsByOwner = async () => {
 export const sendTransaction = async (rawTransaction) => {
     try {
         const transaction = deserializeTransaction(rawTransaction);
+        const blockhash = (await connection.getLatestBlockhash()).blockhash;
+        transaction.recentBlockhash = blockhash;
         transaction.sign(payer);
         return await connection.sendTransaction(transaction, [payer], {
             skipPreflight: true,
@@ -138,15 +140,10 @@ export const sendTransaction = async (rawTransaction) => {
  * @returns {Promise<RpcResponseAndContext<SignatureResult>>} - A promise that resolves when the transaction is confirmed.
  * @throws {Error} - If there was an error sending or confirming the transaction.
  */
-export const sendAndConfirmTransaction = async (rawTransaction) => {
-    try {
-        const signature = await sendTransaction(rawTransaction);
-        return await connection.confirmTransaction(signature, 'confirmed');
-    } catch (error) {
-        console.log('Error sending and confirming transaction:', error);
-        throw error;
-    }
-};
+export const sendAndConfirmTransaction = async (rawTransaction) =>
+    await connection.confirmTransaction(
+        await sendTransaction(rawTransaction), 'confirmed'
+    );
 
 /**
  * Deserialize a raw transaction object into a Transaction object.
@@ -187,7 +184,7 @@ export const close1 = async mint => {
     try {
         const txid = await closeAccount(connection, payer, mint, payer.publicKey, payer.publicKey);
         console.log(txid);
-    }catch (error) {
+    } catch (error) {
         console.log(error);
     }
 }

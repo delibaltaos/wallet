@@ -1,4 +1,5 @@
 import Wallet from './src/wallet.js';
+import * as Telegram from './telegram.js';
 
 class Main {
     #isTryingToSell = false;
@@ -12,11 +13,17 @@ class Main {
                 this.#logWallet();
             });
 
-            Wallet.listenNewTokens(async token => {
-                if (!token.isMutable && token.isMintable) {
-                    await Wallet.buy(token.mint, 0.001);
-                }
-            });
+            // Wallet.listenNewTokens(async token => {
+            //     if (!token.isMutable && !token.isMintable) {
+            //         Wallet.buy(token.mint, 0.0001, 70)
+            //         .then(result => {
+            //             console.log(result);
+            //         })
+            //         .catch(error => {
+            //             console.log("Buy error ", token.mint, error);
+            //         });
+            //     }
+            // });
 
             this.#startSelling()
                 .then(() => {
@@ -42,10 +49,7 @@ class Main {
         this.#isTryingToSell = true;
 
         for (const token of Wallet.tokens) {
-            const result = await this.#sellUsingPriceImpact(token);
-            if (!result) {
-                await this.#sellUsingTokenCost(token);
-            }
+            await this.#sellUsingTokenCost(token);
         }
 
         this.#isTryingToSell = false;
@@ -53,7 +57,7 @@ class Main {
 
     async #sellUsingPriceImpact(token) {
         const rpAmount = parseInt((token.amount / 100).toFixed(0));
-        const {priceImpact, amountOut} = await Wallet.getAmount(token.mint, rpAmount, false, 50);
+        const { priceImpact, amountOut } = await Wallet.getAmount(token.mint, rpAmount, false, 50);
 
         if (isNaN(amountOut) && priceImpact > 90 && amountOut >= 0.0001) {
             console.log(`sellUsingPriceImpact mint : ${token.mint}, amountIn: ${rpAmount}, amountOut: ${amountOut}, priceImpact : ${priceImpact}`);
@@ -67,15 +71,24 @@ class Main {
 
     async #sellUsingTokenCost(token) {
         if (token.cost && token.cost > 0) {
-            const {amountOut} = await Wallet.getAmount(token.mint, token.amount, false);
+            const { amountOut } = await Wallet.getAmount(token.mint, parseInt(token.amount), false);
 
             if (!isNaN(amountOut) && amountOut > 0) {
-                const diff = this.#calculatePercentageDifference(token.cost, amountOut);
-                console.log(`sellUsingTokenCost mint: ${token.mint}, amountIn: ${token.amount}, minAmountOut: ${amountOut}, diff: ${diff}`);
-                if (diff > 0) {
-                    const signature = await Wallet.sell(token.mint, token.amount);
-                    console.log("signature: ", signature);
+                const diff = this.#calculatePercentageDifference(token.cost, amountOut).toFixed(2);
+                const output = token.symbol ? token.symbol : token.mint;
+                console.log(`sell ${output}, ${parseInt(token.amount)}, ${amountOut}, ${diff}`);
+                if (diff > 20) {
+                    const result = await Wallet
+                        .sell(token.mint, parseInt(token.amount))
+                        .catch(error => {
+                            console.log(error)
+                        });
 
+                    if (result.value.err == null) {
+                        console.log("sell result: ", result);
+                        const message = output + " sold with diff : " + diff;
+                        Telegram.sendMessage(message);
+                    }
                 }
             }
         }

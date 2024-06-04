@@ -46,6 +46,14 @@ class Token {
         this.#amount = amount;
     }
 
+    get name() {
+        return this.#name;
+    }
+
+    get symbol() {
+        return this.#symbol;
+    }
+
     get mint() {
         return this.#mint;
     }

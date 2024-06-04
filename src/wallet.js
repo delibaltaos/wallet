@@ -1,9 +1,8 @@
 import Token from './token.js';
 import * as connectionJs from './connection.js';
-import {getActivity} from './transactionParser.js';
-import {payer} from "./config.js";
+import { getActivity } from './transactionParser.js';
+import { payer } from "./config.js";
 import RPC from "./rpc.js";
-import {PublicKey} from "@solana/web3.js";
 
 /**
  * Represents a wallet that allows buying and selling of tokens.
@@ -16,6 +15,7 @@ class Wallet {
     #tokens = [];
     #vacantAccounts = [];
     #toBeBurnedAccounts = [];
+
     constructor() {
         this.#rpc = new RPC();
     }
@@ -71,10 +71,10 @@ class Wallet {
      * @returns {void}
      */
     listenNewTokens(callback) {
-        this.#rpc.listenNewTokens(coin => {
-            coin.mint = new PublicKey(coin.mint);
-            const token = new Token(coin, 0);
-            callback(token);
+        this.#rpc.listenNewTokens(async token => {
+            if (token.isMintable !== undefined && token.isMutable !== undefined) {
+                callback(new Token(token, 0));
+            }
         });
     }
 
@@ -86,7 +86,7 @@ class Wallet {
      * @param {number} slippage - The slippage
      * @returns {Promise} - A promise that resolves to the transaction result.
      */
-    buy = async (mint, amount, slippage=10) =>
+    buy = async (mint, amount, slippage = 10) =>
         this.#swap(mint, amount, true, slippage);
 
     /**
@@ -98,15 +98,7 @@ class Wallet {
      *
      * @return {Promise} A promise that resolves to the result of the sell transaction.
      */
-    async sell(mint, amount, slippage = 10) {
-        const result = this.#swap(mint, amount, false, slippage);
-
-        if (result["value"].err === null) {
-            return true;
-        } else {
-            //
-        }
-    }
+    sell = async (mint, amount, slippage = 10) => this.#swap(mint, amount, false, slippage);
 
     async #synchronize() {
         try {
@@ -123,9 +115,9 @@ class Wallet {
 
                 const toBeBurnedAccounts = [];
 
-                for(const token of smallAmountTokens) {
+                for (const token of smallAmountTokens) {
                     try {
-                        const { amountOut} = await this.getAmount(
+                        const { amountOut } = await this.getAmount(
                             token.mint,
                             token.amount,
                             false,
@@ -147,13 +139,15 @@ class Wallet {
                     !this.#vacantAccounts.includes(token)
                 );
 
-                const finalizedTokens = [];
-                for(const token of tokens) {
-                    const coin = await this.#getCoin(token.mint);
-                    finalizedTokens.push(new Token(coin, token.amount));
+                for (const token of tokens) {
+                    const result = this.#tokens.find(t => t.mint === token.mint);
+                    if (!result) {
+                        const coin = await this.#getCoin(token.mint);
+                        coin.amount = parseInt(token.amount);
+                        this.#tokens.push(coin);
+                    }
                 }
 
-                this.#tokens = finalizedTokens;
                 const transactions = await connectionJs.getTransactions(signatures);
 
                 this.#tokens
@@ -216,12 +210,8 @@ class Wallet {
      * @throws {Error} - If an error occurs during the swap transaction.
      */
     async #swap(mint, amount, isBuy, slippage) {
-        try {
-            const rawTransaction = await this.#rpc.getTransaction(mint, amount, isBuy, payer.publicKey, slippage);
-            return await connectionJs.sendAndConfirmTransaction(rawTransaction);
-        } catch (error) {
-            console.debug(`Error during swap ${isBuy ? 'buy' : 'sell'}:`, error);
-        }
+        const rawTransaction = await this.#rpc.getTransaction(mint, amount, isBuy, payer.publicKey, slippage);
+        return await connectionJs.sendAndConfirmTransaction(rawTransaction);
     }
 
     /**
@@ -251,8 +241,8 @@ class Wallet {
         try {
             return await this.#rpc.getAmount(mint, amount, isBuy, slippage);
         } catch (error) {
-            console.debug('Error getting minimum amount out:', error);
-            return {priceImpact: 0, amountOut: 0};
+            // console.debug('Error getting minimum amount out:', error);
+            return { priceImpact: 0, amountOut: 0 };
         }
     }
 }
